@@ -75,15 +75,21 @@ type LocalState a h
 
 
 type Shown
-    = ShowFile FilePath String ShowMode
+    = ShowFile FilePath FileContents
     | ShowRepl Bool (Maybe String) (Maybe Terminal.Repl.InterpreterInput)
     | ShowError Error.Error
     | ShowNothing
     | ShowFileAndRepl FilePath String String Bool (Maybe String) (Maybe Terminal.Repl.InterpreterInput)
 
 
+type FileContents
+    = TextContents Bool String
+    | HexContents String String String
+    | ElmContents String
+
+
 type ShowMode
-    = AsText Bool
+    = AsText
     | AsHex
     | AsElm
 
@@ -249,6 +255,18 @@ executeCommand command =
         ]
 
 
+showCommandDuration : String -> IO a h ()
+showCommandDuration command =
+    IO.bind Terminal.getDurationSinceLastInput <|
+        \maybeDuration ->
+            case maybeDuration of
+                Nothing ->
+                    IO.noOp
+
+                Just duration ->
+                    Terminal.putLine <| command ++ " took " ++ String.fromInt duration ++ " ms"
+
+
 clearDisplay : IO a h ()
 clearDisplay =
     IO.sequence
@@ -401,8 +419,8 @@ saveFile =
     IO.bind (IO.getLens lensShown) <|
         \shown ->
             case shown of
-                ShowFile name contents _ ->
-                    File.writeUtf8 name contents
+                ShowFile name (TextContents _ text) ->
+                    File.writeUtf8 name text
 
                 _ ->
                     IO.noOp
@@ -493,7 +511,7 @@ ifReplNotShown io =
 showsRepl : Shown -> Bool
 showsRepl shown =
     case shown of
-        ShowFile _ _ _ ->
+        ShowFile _ _ ->
             False
 
         ShowRepl _ _ _ ->
@@ -527,7 +545,7 @@ setShownReplInput maybeInterpreterInput =
 showsStdOut : Shown -> Bool
 showsStdOut shown =
     case shown of
-        ShowFile _ _ _ ->
+        ShowFile _ _ ->
             False
 
         ShowRepl _ _ _ ->
@@ -549,12 +567,12 @@ showFile fileName =
         IO.bind (IO.liftA2 Tuple.pair (toPath fileName) (IO.getLens lensShown)) <|
             \( filePath, shown ) ->
                 case shown of
-                    ShowFile shownPath _ mode ->
+                    ShowFile shownPath _ ->
                         if filePath == shownPath then
                             hideShown
 
                         else
-                            showFileContents filePath mode
+                            showFileContents filePath (initialModeFor filePath)
 
                     _ ->
                         showFileContents filePath (initialModeFor filePath)
@@ -565,14 +583,14 @@ toggleShowMode =
     IO.bind (IO.getLens lensShown) <|
         \shown ->
             case shown of
-                ShowFile filePath _ (AsText changed) ->
+                ShowFile filePath (TextContents changed _) ->
                     IO.sequence
                         [ IO.when changed (\() -> saveFile)
                         , showFileContents filePath (specialModeFor filePath)
                         ]
 
-                ShowFile filePath _ _ ->
-                    showFileContents filePath (AsText False)
+                ShowFile filePath _ ->
+                    showFileContents filePath AsText
 
                 _ ->
                     IO.return ()
@@ -584,25 +602,26 @@ showFileContents filePath mode =
         \contentResult ->
             case contentResult of
                 Right contents ->
-                    setShown <| ShowFile filePath contents mode
+                    setShown <| ShowFile filePath contents
 
                 Left error ->
                     showError (Exit.reactorToReport error)
 
 
-getFileContents : FilePath -> ShowMode -> IO a h (Either Exit.Reactor String)
+getFileContents : FilePath -> ShowMode -> IO a h (Either Exit.Reactor FileContents)
 getFileContents filePath mode =
     case mode of
-        AsText _ ->
-            File.readUtf8 filePath |> IO.fmap Right
+        AsText ->
+            File.readUtf8 filePath |> IO.fmap (TextContents False >> Right)
 
         AsHex ->
             SysFile.readFile filePath
                 |> IO.fmap (Maybe.map bytesToHex)
-                |> IO.fmap (Maybe.withDefault "(error)" >> Right)
+                |> IO.fmap (Maybe.withDefault errorHex >> Right)
 
         AsElm ->
             getExecutableJavaScript filePath
+                |> IO.fmap (Either.fmap ElmContents)
 
 
 setFileContents : String -> IO a h ()
@@ -610,8 +629,8 @@ setFileContents contents =
     IO.modifyLens lensShown <|
         \shown ->
             case shown of
-                ShowFile filePath _ (AsText _) ->
-                    ShowFile filePath contents (AsText True)
+                ShowFile filePath (TextContents _ _) ->
+                    ShowFile filePath (TextContents True contents)
 
                 _ ->
                     shown
@@ -620,7 +639,7 @@ setFileContents contents =
 initialModeFor : FilePath -> ShowMode
 initialModeFor filePath =
     if isEditable filePath then
-        AsText False
+        AsText
 
     else
         AsHex
@@ -769,7 +788,7 @@ showRegistryFetchResult fetchResult =
     case fetchResult of
         Right (Registry.Registry count packages) ->
             Terminal.putLine <|
-                ("fetched " ++ String.fromInt (Map.size packages) ++ " packages")
+                ("fetched " ++ String.fromInt (Map.size packages) ++ " package names")
                     ++ (" / " ++ String.fromInt count ++ " versions")
 
         Left error ->
@@ -790,9 +809,9 @@ showRegistryUpdateResult oldRegistry updateResult =
     case ( oldRegistry, updateResult ) of
         ( Registry.Registry oldCount oldPackages, Right (Registry.Registry count packages) ) ->
             Terminal.putLine <|
-                ("updated " ++ String.fromInt (Map.size oldPackages) ++ " packages")
+                ("updated " ++ String.fromInt (Map.size oldPackages) ++ " package names")
                     ++ (" / " ++ String.fromInt oldCount ++ " versions")
-                    ++ (" with " ++ String.fromInt (Map.size packages - Map.size oldPackages) ++ " new packages")
+                    ++ (" with " ++ String.fromInt (Map.size packages - Map.size oldPackages) ++ " new names")
                     ++ (" / " ++ String.fromInt (count - oldCount) ++ " new versions")
 
         ( _, Left error ) ->
@@ -874,6 +893,7 @@ loadDetails =
             IO.sequence
                 [ Terminal.clearPutLine "loading details"
                 , IO.bind (Details.load root) showDetailsResult
+                , showCommandDuration "loading details"
                 ]
 
 
@@ -957,13 +977,28 @@ elmInstall packageName =
         Just pkg ->
             withRoot <|
                 \root ->
-                    IO.bind (createBreakpointPackageIfNecessary packageName pkg) <|
-                        \() ->
-                            IO.bind (Terminal.Install.install root pkg) <|
-                                \result ->
+                    IO.bindSequence
+                        [ IO.when (isBreakpointPackage packageName)
+                            (\() ->
+                                IO.sequence
+                                    [ addBreakpointPackageToRegistry pkg
+                                    , createBreakpointPackage pkg
+                                    ]
+                            )
+                        ]
+                    <|
+                        IO.bind (Terminal.Install.install root pkg) <|
+                            \result ->
+                                IO.bindSequence
+                                    [ IO.when (isBreakpointPackage packageName)
+                                        (\() ->
+                                            removeBreakpointPackageFromRegistry pkg
+                                        )
+                                    ]
+                                <|
                                     case result of
                                         Right () ->
-                                            IO.noOp
+                                            showCommandDuration "elm install"
 
                                         Left error ->
                                             showError <| Exit.installToReport error
@@ -1037,7 +1072,7 @@ elmRepl mode maybeTag htmlEnabled =
 addRepl : Terminal.Repl.Mode -> Maybe String -> Shown -> Shown
 addRepl mode maybeTag shown =
     case ( mode, shown ) of
-        ( Terminal.Repl.Breakpoint moduleName _ _, ShowFile filePath contents AsElm ) ->
+        ( Terminal.Repl.Breakpoint moduleName _ _, ShowFile filePath (ElmContents contents) ) ->
             ShowFileAndRepl filePath contents moduleName False maybeTag Nothing
 
         ( Terminal.Repl.Module moduleName, _ ) ->
@@ -1064,7 +1099,7 @@ closeRepl : Shown -> Shown
 closeRepl shown =
     case shown of
         ShowFileAndRepl filePath contents _ _ _ _ ->
-            ShowFile filePath contents AsElm
+            ShowFile filePath (ElmContents contents)
 
         _ ->
             ShowNothing
@@ -1123,13 +1158,43 @@ jumpToBottom =
 -- BREAKPOINTS
 
 
-createBreakpointPackageIfNecessary : String -> Pkg.Name -> IO a h ()
-createBreakpointPackageIfNecessary name pkg =
-    if name == "elm/breakpoint" then
-        createBreakpointPackage pkg
+isBreakpointPackage : String -> Bool
+isBreakpointPackage name =
+    name == "elm/breakpoint"
 
-    else
-        IO.noOp
+
+addBreakpointPackageToRegistry : Pkg.Name -> IO a h ()
+addBreakpointPackageToRegistry pkg =
+    modifyRegistry
+        (\(Registry.Registry count registry) ->
+            Registry.Registry
+                (count + 1)
+                (Map.insert (Pkg.toComparable pkg) (Registry.KnownVersions V.one []) registry)
+        )
+
+
+removeBreakpointPackageFromRegistry : Pkg.Name -> IO a h ()
+removeBreakpointPackageFromRegistry pkg =
+    modifyRegistry
+        (\(Registry.Registry count registry) ->
+            Registry.Registry
+                (count - 1)
+                (Map.delete (Pkg.toComparable pkg) registry)
+        )
+
+
+modifyRegistry : (Registry.Registry -> Registry.Registry) -> IO a h ()
+modifyRegistry modifyFun =
+    IO.bind Stuff.getPackageCache <|
+        \cache ->
+            IO.bind (Registry.read cache) <|
+                \maybeRegistry ->
+                    case maybeRegistry of
+                        Just registry ->
+                            Registry.write cache (modifyFun registry)
+
+                        Nothing ->
+                            IO.noOp
 
 
 createBreakpointPackage : Pkg.Name -> IO a h ()
@@ -1880,14 +1945,14 @@ viewRightColumn : IdRecord -> Shown -> TList Terminal.Output -> Html (IO a h ())
 viewRightColumn ids shown stdOut =
     Html.section [ Html.Attributes.class "right-column" ] <|
         case shown of
-            ShowFile filePath contents mode ->
-                [ viewFileContents ids filePath contents mode (isEditable filePath) ]
+            ShowFile filePath contents ->
+                [ viewFileContents ids filePath contents (isEditable filePath) ]
 
             ShowRepl flashed openedModule maybeInterpreterInput ->
                 [ viewRepl ids stdOut flashed openedModule Nothing maybeInterpreterInput ]
 
             ShowFileAndRepl filePath contents openedModule flashed maybeTag maybeInterpreterInput ->
-                [ viewFileContents ids filePath contents AsElm (isEditable filePath)
+                [ viewFileContents ids filePath (ElmContents contents) (isEditable filePath)
                 , viewRepl ids stdOut flashed (Just openedModule) maybeTag maybeInterpreterInput
                 ]
 
@@ -2040,7 +2105,7 @@ viewInterpreterInput ids maybeJavaScript =
             []
 
         Just (Terminal.Repl.InterpretValue javaScript) ->
-            [ [ Html.node "eval-elm"
+            [ [ Html.node "elm-code"
                     [ Html.Attributes.attribute "code"
                         (javaScript ++ valueOutputCode ids.replResultEvent)
                     , Html.Events.on ids.replResultEvent handleOutput
@@ -2050,7 +2115,7 @@ viewInterpreterInput ids maybeJavaScript =
             ]
 
         Just (Terminal.Repl.InterpretHtml moduleName javaScript) ->
-            [ [ Html.node "eval-elm"
+            [ [ Html.node "elm-code"
                     [ Html.Attributes.attribute "code"
                         (javaScript ++ htmlOutputCode moduleName)
                     ]
@@ -2066,8 +2131,8 @@ viewInterpreterInput ids maybeJavaScript =
 -- VIEW FILE CONTENTS
 
 
-viewFileContents : IdRecord -> FilePath -> String -> ShowMode -> Bool -> Html (IO a h ())
-viewFileContents ids filePath contents mode editable =
+viewFileContents : IdRecord -> FilePath -> FileContents -> Bool -> Html (IO a h ())
+viewFileContents ids filePath contents editable =
     let
         ( _, fileName ) =
             SysFile.splitLastName filePath
@@ -2079,8 +2144,8 @@ viewFileContents ids filePath contents mode editable =
             else
                 Nothing
     in
-    case mode of
-        AsText _ ->
+    case contents of
+        TextContents _ text ->
             Skeleton.box
                 { title = fileName
                 , titleClick = titleClick
@@ -2089,27 +2154,34 @@ viewFileContents ids filePath contents mode editable =
                             [ Html.Attributes.class "edit-area"
                             , Html.Events.onInput setFileContents
                             ]
-                            [ Html.text contents ]
+                            [ Html.text text ]
                       ]
                     ]
                 , footerClick = Just saveFile
                 }
 
-        AsHex ->
-            Skeleton.box
-                { title = fileName
-                , titleClick = titleClick
-                , items = [ [ Html.pre [ Html.Attributes.class "hex-output" ] [ Html.text contents ] ] ]
-                , footerClick = Nothing
-                }
-
-        AsElm ->
+        HexContents addresses hexes chars ->
             Skeleton.box
                 { title = fileName
                 , titleClick = titleClick
                 , items =
-                    [ [ Html.node "eval-elm"
-                            [ Html.Attributes.attribute "code" contents
+                    [ [ Html.div [ Html.Attributes.class "hex-output" ]
+                            [ Html.pre [] [ Html.text addresses ]
+                            , Html.pre [] [ Html.text hexes ]
+                            , Html.pre [] [ Html.text chars ]
+                            ]
+                      ]
+                    ]
+                , footerClick = Nothing
+                }
+
+        ElmContents code ->
+            Skeleton.box
+                { title = fileName
+                , titleClick = titleClick
+                , items =
+                    [ [ Html.node "elm-code"
+                            [ Html.Attributes.attribute "code" code
                             , Html.Attributes.id ids.elmCodeId
                             , Html.Events.on ids.breakpointSuspendedEvent handleBreakpoint
                             ]
@@ -2124,7 +2196,7 @@ viewFileContents ids filePath contents mode editable =
 -- HEX VIEW
 
 
-bytesToHex : Bytes.Bytes -> String
+bytesToHex : Bytes.Bytes -> FileContents
 bytesToHex bytes =
     let
         width =
@@ -2138,31 +2210,41 @@ bytesToHex bytes =
     in
     if width > 0 then
         BD.decode (bytesToHexDecoder lines rest) bytes
-            |> Maybe.withDefault "(error)"
+            |> Maybe.withDefault errorHex
 
     else
-        "(empty)"
+        emptyHex
 
 
-bytesToHexDecoder : Int -> Int -> BD.Decoder String
+emptyHex : FileContents
+emptyHex =
+    HexContents "(empty)" "" ""
+
+
+errorHex : FileContents
+errorHex =
+    HexContents "(error)" "" ""
+
+
+bytesToHexDecoder : Int -> Int -> BD.Decoder FileContents
 bytesToHexDecoder lines rest =
-    BD.succeed (\ls r -> (ls ++ r) |> String.join "\n")
+    BD.succeed linesAndRestToContents
         |> andMap (nTimes lines lineDecoder)
         |> andMap (restDecoder rest)
 
 
-lineDecoder : BD.Decoder String
+lineDecoder : BD.Decoder ( String, String )
 lineDecoder =
     nTimes 16 BD.unsignedInt8
         |> BD.map wordsToLine
 
 
-wordsToLine : List Int -> String
+wordsToLine : List Int -> ( String, String )
 wordsToLine words =
-    wordsToHex words ++ "   " ++ wordsToChars words
+    ( wordsToHex words, wordsToChars words )
 
 
-restDecoder : Int -> BD.Decoder (List String)
+restDecoder : Int -> BD.Decoder (List ( String, String ))
 restDecoder rest =
     if rest > 0 then
         nTimes rest BD.unsignedInt8
@@ -2172,9 +2254,9 @@ restDecoder rest =
         BD.succeed []
 
 
-wordsToRest : List Int -> String
+wordsToRest : List Int -> ( String, String )
 wordsToRest words =
-    String.padRight 42 ' ' (wordsToHex words) ++ wordsToChars words
+    ( String.padRight 39 ' ' (wordsToHex words), wordsToChars words )
 
 
 wordsToHex : List Int -> String
@@ -2222,6 +2304,31 @@ wordToChar word =
 
     else
         Char.fromCode word
+
+
+linesAndRestToContents : List ( String, String ) -> List ( String, String ) -> FileContents
+linesAndRestToContents lines rest =
+    let
+        ( hexes, chars ) =
+            MList.unzip (lines ++ rest)
+
+        addresses =
+            MList.range 0 (MList.length hexes - 1)
+                |> MList.map lineNumberToAddress
+    in
+    HexContents
+        (String.join "\n" addresses)
+        (String.join "\n" hexes)
+        (String.join "\n" chars)
+
+
+lineNumberToAddress : Int -> String
+lineNumberToAddress lineNumber =
+    ""
+        ++ wordToHex (modBy 0x0100 (lineNumber // 0x00100000))
+        ++ wordToHex (modBy 0x0100 (lineNumber // 0x1000))
+        ++ wordToHex (modBy 0x0100 (lineNumber // 0x10))
+        ++ wordToHex (modBy 0x0100 (lineNumber * 0x10))
 
 
 

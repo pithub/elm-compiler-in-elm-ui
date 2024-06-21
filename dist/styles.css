@@ -57,8 +57,14 @@ a:hover {
   width: 100%;
   max-height: calc(100vh - 227px);
   overflow-y: auto;
-  font-family: 'Source Code Pro';
+  display: flex;
+  justify-content: space-between;
+}
+
+.hex-output pre {
   margin: 0;
+  flex: 0 0 auto;
+  font-family: 'Source Code Pro';
 }
 
 

@@ -8,6 +8,8 @@ module Builder.Deps.Registry exposing
   --, latest
   , getVersions
   , getVersionsE
+  --
+  , write
   )
 
 
@@ -62,6 +64,12 @@ read cache =
   File.readBinary bRegistry (Stuff.registry cache)
 
 
+{- NEW: write -}
+write : Stuff.PackageCache -> Registry -> IO a c d e f g h ()
+write cache registry =
+  File.writeBinary bRegistry (Stuff.registry cache) registry
+
+
 
 -- FETCH
 
@@ -69,19 +77,11 @@ read cache =
 fetch : Http.Manager -> Stuff.PackageCache -> IO a c d e f g h (Either Exit.RegistryProblem Registry)
 fetch manager cache =
   post manager "/all-packages" allPkgsDecoder <|
-    \orgVersions ->
-          let versions = addSpecialVersions orgVersions in
+    \versions ->
           let size = Map.foldr addEntry 0 versions in
           let registry = Registry size versions in
-          let path = Stuff.registry cache in
-          IO.bind (File.writeBinary bRegistry path registry) <| \_ ->
+          IO.bind (write cache registry) <| \_ ->
           IO.return registry
-
-
-{- NEW: addSpecialVersions -}
-addSpecialVersions : Map.Map Pkg.Comparable KnownVersions -> Map.Map Pkg.Comparable KnownVersions
-addSpecialVersions =
-  Map.insert ( "elm", "breakpoint" ) (KnownVersions V.one [])
 
 
 addEntry : KnownVersions -> Int -> Int
@@ -124,7 +124,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
             newPkgs = MList.foldr addNew packages news
             newRegistry = Registry newSize newPkgs
           in
-          IO.bind (File.writeBinary bRegistry (Stuff.registry cache) newRegistry) <| \_ ->
+          IO.bind (write cache newRegistry) <| \_ ->
           IO.return newRegistry
 
 

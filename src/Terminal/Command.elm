@@ -7,6 +7,7 @@ module Terminal.Command exposing
     , clearPrompt
     , clearPutLine
     , clearStdOut
+    , getDurationSinceLastInput
     , getInput
     , getLine
     , getLineWithInitial
@@ -32,6 +33,7 @@ import Extra.System.IO as IO
 import Extra.Type.Lens exposing (Lens)
 import Extra.Type.List exposing (TList)
 import Global
+import Time
 
 
 
@@ -54,6 +56,8 @@ type LocalState a g h
         String
         -- waiting
         (Maybe String)
+        -- inputTime
+        (Maybe Int)
 
 
 initialState : LocalState a g h
@@ -69,40 +73,49 @@ initialState =
         ""
         -- waiting
         Nothing
+        -- inputTime
+        Nothing
 
 
 lensStdIn : Lens (State a g h) (TList (String -> IO a g h ()))
 lensStdIn =
-    { getter = \(Global.State _ _ _ _ _ (LocalState x _ _ _ _) _ _) -> x
-    , setter = \x (Global.State a b c d e (LocalState _ bi ci di ei) g h) -> Global.State a b c d e (LocalState x bi ci di ei) g h
+    { getter = \(Global.State _ _ _ _ _ (LocalState x _ _ _ _ _) _ _) -> x
+    , setter = \x (Global.State a b c d e (LocalState _ bi ci di ei fi) g h) -> Global.State a b c d e (LocalState x bi ci di ei fi) g h
     }
 
 
 lensStdOut : Lens (State a g h) (TList Output)
 lensStdOut =
-    { getter = \(Global.State _ _ _ _ _ (LocalState _ x _ _ _) _ _) -> x
-    , setter = \x (Global.State a b c d e (LocalState ai _ ci di ei) g h) -> Global.State a b c d e (LocalState ai x ci di ei) g h
+    { getter = \(Global.State _ _ _ _ _ (LocalState _ x _ _ _ _) _ _) -> x
+    , setter = \x (Global.State a b c d e (LocalState ai _ ci di ei fi) g h) -> Global.State a b c d e (LocalState ai x ci di ei fi) g h
     }
 
 
 lensPrompt : Lens (State a g h) String
 lensPrompt =
-    { getter = \(Global.State _ _ _ _ _ (LocalState _ _ x _ _) _ _) -> x
-    , setter = \x (Global.State a b c d e (LocalState ai bi _ di ei) g h) -> Global.State a b c d e (LocalState ai bi x di ei) g h
+    { getter = \(Global.State _ _ _ _ _ (LocalState _ _ x _ _ _) _ _) -> x
+    , setter = \x (Global.State a b c d e (LocalState ai bi _ di ei fi) g h) -> Global.State a b c d e (LocalState ai bi x di ei fi) g h
     }
 
 
 lensInput : Lens (State a g h) String
 lensInput =
-    { getter = \(Global.State _ _ _ _ _ (LocalState _ _ _ x _) _ _) -> x
-    , setter = \x (Global.State a b c d e (LocalState ai bi ci _ ei) g h) -> Global.State a b c d e (LocalState ai bi ci x ei) g h
+    { getter = \(Global.State _ _ _ _ _ (LocalState _ _ _ x _ _) _ _) -> x
+    , setter = \x (Global.State a b c d e (LocalState ai bi ci _ ei fi) g h) -> Global.State a b c d e (LocalState ai bi ci x ei fi) g h
     }
 
 
 lensWaiting : Lens (State a g h) (Maybe String)
 lensWaiting =
-    { getter = \(Global.State _ _ _ _ _ (LocalState _ _ _ _ x) _ _) -> x
-    , setter = \x (Global.State a b c d e (LocalState ai bi ci di _) g h) -> Global.State a b c d e (LocalState ai bi ci di x) g h
+    { getter = \(Global.State _ _ _ _ _ (LocalState _ _ _ _ x _) _ _) -> x
+    , setter = \x (Global.State a b c d e (LocalState ai bi ci di _ fi) g h) -> Global.State a b c d e (LocalState ai bi ci di x fi) g h
+    }
+
+
+lensInputTime : Lens (State a g h) (Maybe Int)
+lensInputTime =
+    { getter = \(Global.State _ _ _ _ _ (LocalState _ _ _ _ _ x) _ _) -> x
+    , setter = \x (Global.State a b c d e (LocalState ai bi ci di ei _) g h) -> Global.State a b c d e (LocalState ai bi ci di ei x) g h
     }
 
 
@@ -153,9 +166,11 @@ gotLine line =
                     IO.noOp
 
                 continuation :: cs ->
-                    IO.bind
-                        (IO.putLens lensStdIn cs)
-                        (\_ -> continuation line)
+                    IO.bindSequence
+                        [ IO.putLens lensStdIn cs
+                        , setInputTime
+                        ]
+                        (continuation line)
 
 
 
@@ -256,7 +271,9 @@ askHelp =
                             IO.return True
 
                         "n" ->
-                            IO.return False
+                            IO.bindSequence
+                                [ clearInputTime ]
+                                (IO.return False)
 
                         _ ->
                             IO.bind (putTemporary "Must type 'y' for yes or 'n' for no: ") <|
@@ -300,3 +317,33 @@ setCurrentInput input =
 setNextInput : String -> IO a g h ()
 setNextInput input =
     IO.putLens lensWaiting (Just input)
+
+
+
+-- INPUT TIME
+
+
+clearInputTime : IO a g h ()
+clearInputTime =
+    IO.putLens lensInputTime Nothing
+
+
+setInputTime : IO a g h ()
+setInputTime =
+    IO.bind IO.now <|
+        \now ->
+            IO.putLens lensInputTime (Just (Time.posixToMillis now))
+
+
+getDurationSinceLastInput : IO a g h (Maybe Int)
+getDurationSinceLastInput =
+    IO.bind (IO.getLens lensInputTime) <|
+        \inputTime ->
+            case inputTime of
+                Just lastInputTime ->
+                    IO.bind IO.now <|
+                        \now ->
+                            IO.return (Just (Time.posixToMillis now - lastInputTime))
+
+                Nothing ->
+                    IO.return Nothing

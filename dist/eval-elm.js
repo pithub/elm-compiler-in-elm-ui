@@ -1,4 +1,4 @@
-customElements.define('eval-elm',
+customElements.define('elm-code',
   class extends HTMLElement {
     connectedCallback() {
       try {

@@ -87,7 +87,7 @@ replicate n a ( nextId, map, refState ) =
         go : Int -> IORef.IO a (Map Int (IORef a)) -> IORef.IO a (Map Int (IORef a))
         go i vecIO =
             if i < n then
-                go (i + 1) <| IO.liftA2 (Map.insert i) (IORef.new a) vecIO
+                go (i + 1) (IO.liftA2 (Map.insert i) (IORef.new a) vecIO)
 
             else
                 vecIO

@@ -383,7 +383,7 @@ isEquivalent root path oldPath =
       case ( prefix, testPath ) of
         ( [], _ ) -> True
         ( _, [] ) -> False
-        ( prefixHead :: prefixTail, testHead :: testTail ) -> prefixHead == testHead && startsWith prefixTail testTail
+        ( prefixHead :: prefixTail, testHead :: testTail ) -> if prefixHead == testHead then startsWith prefixTail testTail else False
   in
   startsWith (SysFile.getNames (SysFile.makeRelative root path)) (SysFile.getNames oldPath)
 

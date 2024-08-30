@@ -95,17 +95,17 @@ extensionIcons =
 
 getExtension : String -> String
 getExtension str =
-  getExtensionHelp (String.split "." str)
+    getExtensionHelp (String.split "." str)
 
 
 getExtensionHelp : List String -> String
 getExtensionHelp segments =
-  case segments of
-    [] ->
-      ""
+    case segments of
+        [] ->
+            ""
 
-    [ext] ->
-      String.toLower ext
+        [ ext ] ->
+            String.toLower ext
 
-    _ :: rest ->
-      getExtensionHelp rest
+        _ :: rest ->
+            getExtensionHelp rest

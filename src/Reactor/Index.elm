@@ -68,8 +68,6 @@ type LocalState a h
         Time.Zone
         -- shown
         Shown
-        -- idPrefix
-        String
         -- htmlEnabled
         (IO a h Bool)
 
@@ -101,33 +99,25 @@ initialState =
         Time.utc
         -- shown
         ShowNothing
-        -- idPrefix
-        ""
         -- htmlEnabled
         (IO.pure False)
 
 
 lensZone =
-    { getter = \(Global.State _ _ _ _ _ _ (LocalState x _ _ _) _) -> x
-    , setter = \x (Global.State a b c d e f (LocalState _ bi ci di) h) -> Global.State a b c d e f (LocalState x bi ci di) h
+    { getter = \(Global.State _ _ _ _ _ _ (LocalState x _ _) _) -> x
+    , setter = \x (Global.State a b c d e f (LocalState _ bi ci) h) -> Global.State a b c d e f (LocalState x bi ci) h
     }
 
 
 lensShown =
-    { getter = \(Global.State _ _ _ _ _ _ (LocalState _ x _ _) _) -> x
-    , setter = \x (Global.State a b c d e f (LocalState ai _ ci di) h) -> Global.State a b c d e f (LocalState ai x ci di) h
-    }
-
-
-lensIdPrefix =
-    { getter = \(Global.State _ _ _ _ _ _ (LocalState _ _ x _) _) -> x
-    , setter = \x (Global.State a b c d e f (LocalState ai bi _ di) h) -> Global.State a b c d e f (LocalState ai bi x di) h
+    { getter = \(Global.State _ _ _ _ _ _ (LocalState _ x _) _) -> x
+    , setter = \x (Global.State a b c d e f (LocalState ai _ ci) h) -> Global.State a b c d e f (LocalState ai x ci) h
     }
 
 
 lensHtmlEnabled =
-    { getter = \(Global.State _ _ _ _ _ _ (LocalState _ _ _ x) _) -> x
-    , setter = \x (Global.State a b c d e f (LocalState ai bi ci _) h) -> Global.State a b c d e f (LocalState ai bi ci x) h
+    { getter = \(Global.State _ _ _ _ _ _ (LocalState _ _ x) _) -> x
+    , setter = \x (Global.State a b c d e f (LocalState ai bi _) h) -> Global.State a b c d e f (LocalState ai bi x) h
     }
 
 
@@ -201,12 +191,6 @@ executeCommand command =
 
           else if String.startsWith "m " command then
             mount (String.dropLeft 2 command |> String.split " ")
-
-          else if command == "p" then
-            showIdPrefix
-
-          else if String.startsWith "p " command then
-            setIdPrefix (String.dropLeft 2 command)
 
           else if String.startsWith "r " command then
             removeEntry (String.dropLeft 2 command)
@@ -319,8 +303,6 @@ Other
 
 h - show help (this text)
 l - show original license
-p - show id prefix
-p <prefix> - set id prefix
 """
 
 
@@ -344,21 +326,6 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 -- IDS
 
 
-showIdPrefix : IO a h ()
-showIdPrefix =
-    IO.bind (IO.getLens lensIdPrefix) <|
-        \idPrefix ->
-            Terminal.putLine <| "ID prefix " ++ Debug.toString idPrefix
-
-
-setIdPrefix : String -> IO a h ()
-setIdPrefix string =
-    IO.sequence
-        [ IO.putLens lensIdPrefix string
-        , showIdPrefix
-        ]
-
-
 type alias IdRecord =
     { elmCodeId : String
     , elmResultId : String
@@ -368,23 +335,13 @@ type alias IdRecord =
     }
 
 
-idsIO : IO a h IdRecord
-idsIO =
-    IO.rmap IO.get idRecord
-
-
-idRecord : State a h -> IdRecord
-idRecord state =
-    let
-        idPrefix : String
-        idPrefix =
-            lensIdPrefix.getter state
-    in
-    { elmCodeId = idPrefix ++ "elm-code"
-    , elmResultId = idPrefix ++ "elm-result"
-    , replItemsId = idPrefix ++ "repl-items"
-    , replResultEvent = idPrefix ++ "repl-result"
-    , breakpointSuspendedEvent = idPrefix ++ "breakpoint-suspended"
+idRecord : IdRecord
+idRecord =
+    { elmCodeId = "elm-code"
+    , elmResultId = "elm-result"
+    , replItemsId = "repl-items"
+    , replResultEvent = "repl-result"
+    , breakpointSuspendedEvent = "breakpoint-suspended"
     }
 
 
@@ -705,11 +662,9 @@ showError report =
 
 getExecutableJavaScript : FilePath -> IO a h (Either Exit.Reactor String)
 getExecutableJavaScript filePath =
-    IO.bind idsIO <|
-        \ids ->
-            IO.rmap (getJavaScript filePath) <|
-                Either.fmap <|
-                    \javaScript -> javaScript ++ startElmCommand ids.elmResultId filePath
+    IO.rmap (getJavaScript filePath) <|
+        Either.fmap <|
+            \javaScript -> javaScript ++ startElmCommand idRecord.elmResultId filePath
 
 
 getJavaScript : FilePath -> IO a h (Either Exit.Reactor String)
@@ -1151,12 +1106,10 @@ handleOutput =
 
 jumpToBottom : IO a h ()
 jumpToBottom =
-    IO.bind idsIO <|
-        \ids ->
-            Dom.getViewportOf ids.replItemsId
-                |> Task.andThen (\info -> Dom.setViewportOf ids.replItemsId 0 info.scene.height)
-                |> Task.attempt (\_ -> IO.noOp)
-                |> IO.liftCmdIO
+    Dom.getViewportOf idRecord.replItemsId
+        |> Task.andThen (\info -> Dom.setViewportOf idRecord.replItemsId 0 info.scene.height)
+        |> Task.attempt (\_ -> IO.noOp)
+        |> IO.liftCmdIO
 
 
 
@@ -1191,11 +1144,9 @@ createBreakpointPackage pkg =
                 [ SysFile.createDirectoryIfMissing True kernelPath
                 , File.writeUtf8 (SysFile.addName packagePath "elm.json") breakpointOutline
                 , File.writeUtf8 (SysFile.addName srcPath "Breakpoint.elm") breakpointModule
-                , IO.bind idsIO <|
-                    \ids ->
-                        File.writeUtf8
-                            (SysFile.addName kernelPath "Breakpoint.js")
-                            (breakpointKernel ids.breakpointSuspendedEvent)
+                , File.writeUtf8
+                    (SysFile.addName kernelPath "Breakpoint.js")
+                    (breakpointKernel idRecord.breakpointSuspendedEvent)
                 ]
 
 
@@ -1824,12 +1775,10 @@ handleBreakpoint =
             IO.sequence
                 [ IO.sleep 100
                 , Terminal.setNextInput "bpArg"
-                , IO.bind idsIO <|
-                    \ids ->
-                        elmRepl
-                            (Terminal.Repl.Breakpoint moduleName ids.elmCodeId bpName)
-                            (Just tag)
-                            True
+                , elmRepl
+                    (Terminal.Repl.Breakpoint moduleName idRecord.elmCodeId bpName)
+                    (Just tag)
+                    True
                 ]
         )
         |> jsonAndMap (Json.Decode.at [ "detail", "module" ] Json.Decode.string)
@@ -1887,9 +1836,6 @@ view state =
 
         ( dirs, files ) =
             getDirsAndFiles (lensZone.getter state) state
-
-        ids =
-            idRecord state
     in
     { title = String.join "/" ("~" :: revCwd)
     , body =
@@ -1901,7 +1847,7 @@ view state =
                 files
                 (Terminal.lensPrompt.getter state)
                 (Terminal.lensInput.getter state)
-            , viewRightColumn ids (lensShown.getter state) (Terminal.lensStdOut.getter state)
+            , viewRightColumn idRecord (lensShown.getter state) (Terminal.lensStdOut.getter state)
             , Html.div [ Html.Attributes.style "clear" "both" ] []
             ]
         ]

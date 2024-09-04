@@ -29,10 +29,6 @@ type alias Model =
     Reactor.State () ()
 
 
-
---Index.State () ()
-
-
 initialModel : Model
 initialModel =
     Global.State

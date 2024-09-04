@@ -24,7 +24,6 @@ import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Reactor.Solver as Solver
 import Elm.Error as Error
 import Extra.Class.Applicative as Applicative
 import Extra.System.File as SysFile exposing (FileName, FilePath)
@@ -42,6 +41,7 @@ import Reactor.Errors as Errors
 import Reactor.Index.Icon as Icon
 import Reactor.Index.Navigator as Navigator
 import Reactor.Index.Skeleton as Skeleton
+import Reactor.Solver as Solver
 import Task
 import Terminal.Command as Terminal
 import Terminal.Helpers as Helpers

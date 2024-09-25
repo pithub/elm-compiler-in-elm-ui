@@ -977,25 +977,10 @@ elmInstall packageName =
         Just pkg ->
             withRoot <|
                 \root ->
-                    IO.bindSequence
-                        [ IO.when (isBreakpointPackage packageName)
-                            (\() ->
-                                IO.sequence
-                                    [ addBreakpointPackageToRegistry pkg
-                                    , createBreakpointPackage pkg
-                                    ]
-                            )
-                        ]
-                    <|
-                        IO.bind (Terminal.Install.install root pkg) <|
-                            \result ->
-                                IO.bindSequence
-                                    [ IO.when (isBreakpointPackage packageName)
-                                        (\() ->
-                                            removeBreakpointPackageFromRegistry pkg
-                                        )
-                                    ]
-                                <|
+                    IO.bind (createBreakpointPackageIfNecessary packageName pkg) <|
+                        \() ->
+                            IO.bind (Terminal.Install.install root pkg) <|
+                                \result ->
                                     case result of
                                         Right () ->
                                             showCommandDuration "elm install"
@@ -1158,43 +1143,13 @@ jumpToBottom =
 -- BREAKPOINTS
 
 
-isBreakpointPackage : String -> Bool
-isBreakpointPackage name =
-    name == "elm/breakpoint"
+createBreakpointPackageIfNecessary : String -> Pkg.Name -> IO a h ()
+createBreakpointPackageIfNecessary name pkg =
+    if name == "elm/breakpoint" then
+        createBreakpointPackage pkg
 
-
-addBreakpointPackageToRegistry : Pkg.Name -> IO a h ()
-addBreakpointPackageToRegistry pkg =
-    modifyRegistry
-        (\(Registry.Registry count registry) ->
-            Registry.Registry
-                (count + 1)
-                (Map.insert (Pkg.toComparable pkg) (Registry.KnownVersions V.one []) registry)
-        )
-
-
-removeBreakpointPackageFromRegistry : Pkg.Name -> IO a h ()
-removeBreakpointPackageFromRegistry pkg =
-    modifyRegistry
-        (\(Registry.Registry count registry) ->
-            Registry.Registry
-                (count - 1)
-                (Map.delete (Pkg.toComparable pkg) registry)
-        )
-
-
-modifyRegistry : (Registry.Registry -> Registry.Registry) -> IO a h ()
-modifyRegistry modifyFun =
-    IO.bind Stuff.getPackageCache <|
-        \cache ->
-            IO.bind (Registry.read cache) <|
-                \maybeRegistry ->
-                    case maybeRegistry of
-                        Just registry ->
-                            Registry.write cache (modifyFun registry)
-
-                        Nothing ->
-                            IO.noOp
+    else
+        IO.noOp
 
 
 createBreakpointPackage : Pkg.Name -> IO a h ()

@@ -1,9 +1,5 @@
 # UI for Testing the Elm Compiler in Elm
 
-⚠️ ***WARNING:** This is still work-in-progress !!!* ⚠️
-
-*The app currently **only runs in Safari**, but not in other browsers !*
-
 <br>
 
 
@@ -45,5 +41,19 @@ node cors-proxy.js
 #### Show Help Message
 
  Enter "h" or an empty line in the command input field.
+
+<br>
+
+
+## What's next?
+
+As of today, I have no plans to further develop this application,
+except perhaps to fix the remaining issues.
+Instead, I want to use parts of the code for my "interactive
+tutorials" as I talked about in the Elm Online Meetup.
+
+If there is enough and serious interest, I could try to extract
+self-contained parts of the code and publish them,
+for example as Elm packages.
 
 <br>

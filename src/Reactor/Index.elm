@@ -58,18 +58,18 @@ import Time
 -- PUBLIC STATE
 
 
-type alias State a h =
-    Terminal.State a (LocalState a h) h
+type alias State a =
+    Terminal.Repl.GlobalState a (LocalState a)
 
 
-type LocalState a h
+type LocalState a
     = LocalState
         -- zone
         Time.Zone
         -- shown
         Shown
         -- htmlEnabled
-        (IO a h Bool)
+        (IO a Bool)
 
 
 type Shown
@@ -92,7 +92,7 @@ type ShowMode
     | AsElm
 
 
-initialState : LocalState a h
+initialState : LocalState a
 initialState =
     LocalState
         -- zone
@@ -125,11 +125,11 @@ lensHtmlEnabled =
 -- PRIVATE IO
 
 
-type alias IO a h v =
-    IO.IO (State a h) v
+type alias IO a v =
+    IO.IO (State a) v
 
 
-initialIO : IO a h Bool -> IO a h ()
+initialIO : IO a Bool -> IO a ()
 initialIO htmlEnabled =
     IO.sequence
         [ setHtmlEnabled htmlEnabled
@@ -142,7 +142,7 @@ initialIO htmlEnabled =
 -- TIME
 
 
-getTimeZone : IO a h ()
+getTimeZone : IO a ()
 getTimeZone =
     IO.bind
         (IO.liftCmd <| Task.perform identity Time.here)
@@ -160,12 +160,12 @@ timeString zone time =
 -- HTML ENABLED
 
 
-setHtmlEnabled : IO a h Bool -> IO a h ()
+setHtmlEnabled : IO a Bool -> IO a ()
 setHtmlEnabled =
     IO.putLens lensHtmlEnabled
 
 
-isHtmlEnabled : IO a h Bool
+isHtmlEnabled : IO a Bool
 isHtmlEnabled =
     IO.join (IO.getLens lensHtmlEnabled)
 
@@ -174,12 +174,12 @@ isHtmlEnabled =
 -- COMMAND LOOP
 
 
-commandLoop : IO a h ()
+commandLoop : IO a ()
 commandLoop =
     IO.bind (IO.bind Terminal.getLine executeCommand) (\_ -> commandLoop)
 
 
-executeCommand : String -> IO a h ()
+executeCommand : String -> IO a ()
 executeCommand command =
     IO.sequence
         [ clearDisplay
@@ -242,7 +242,7 @@ executeCommand command =
         ]
 
 
-showCommandDuration : String -> IO a h ()
+showCommandDuration : String -> IO a ()
 showCommandDuration command =
     IO.bind Terminal.getDurationSinceLastInput <|
         \maybeDuration ->
@@ -254,7 +254,7 @@ showCommandDuration command =
                     Terminal.putLine <| command ++ " took " ++ String.fromInt duration ++ " ms"
 
 
-clearDisplay : IO a h ()
+clearDisplay : IO a ()
 clearDisplay =
     IO.sequence
         [ clearIO
@@ -262,7 +262,7 @@ clearDisplay =
         ]
 
 
-clearIO : IO a h ()
+clearIO : IO a ()
 clearIO =
     IO.sequence
         [ Terminal.clearInput
@@ -270,7 +270,7 @@ clearIO =
         ]
 
 
-showHelp : IO a h ()
+showHelp : IO a ()
 showHelp =
     Terminal.putLine """Intermediate Steps (for the Demo)
 
@@ -306,7 +306,7 @@ l - show original license
 """
 
 
-showLicense : IO a h ()
+showLicense : IO a ()
 showLicense =
     Terminal.putLine """Copyright 2012-present Evan Czaplicki
 
@@ -349,12 +349,12 @@ idRecord =
 -- FILE OPERATIONS
 
 
-createDirectory : String -> IO a h ()
+createDirectory : String -> IO a ()
 createDirectory string =
     IO.bind (toPath string) (SysFile.createDirectoryIfMissing True)
 
 
-createFile : String -> IO a h ()
+createFile : String -> IO a ()
 createFile string =
     IO.bind (toPath string) (\filePath -> SysFile.writeFile filePath emptyBytes)
 
@@ -371,7 +371,7 @@ getExtension filePath =
             Tuple.second (SysFile.splitExtension name)
 
 
-mount : TList String -> IO a h ()
+mount : TList String -> IO a ()
 mount strings =
     case strings of
         [ mountPoint, target ] ->
@@ -381,7 +381,7 @@ mount strings =
             IO.noOp
 
 
-removeEntry : String -> IO a h ()
+removeEntry : String -> IO a ()
 removeEntry string =
     IO.bind (toPath string) <|
         \path ->
@@ -391,7 +391,7 @@ removeEntry string =
                 ]
 
 
-saveFile : IO a h ()
+saveFile : IO a ()
 saveFile =
     IO.bind (IO.getLens lensShown) <|
         \shown ->
@@ -403,7 +403,7 @@ saveFile =
                     IO.noOp
 
 
-toPath : String -> IO a h FilePath
+toPath : String -> IO a FilePath
 toPath string =
     SysFile.makeAbsolute (SysFile.fromString string)
 
@@ -412,7 +412,7 @@ toPath string =
 -- CURRENT WORKING DIRECTORY
 
 
-pushDirectory : FileName -> IO a h ()
+pushDirectory : FileName -> IO a ()
 pushDirectory fileName =
     ifReplNotShown <|
         IO.sequence
@@ -421,7 +421,7 @@ pushDirectory fileName =
             ]
 
 
-changeCwd : TList FileName -> IO a h ()
+changeCwd : TList FileName -> IO a ()
 changeCwd cwd =
     ifReplNotShown <|
         IO.sequence
@@ -450,12 +450,12 @@ rootPath =
 -- FILE DISPLAY
 
 
-hideShown : IO a h ()
+hideShown : IO a ()
 hideShown =
     setShown ShowNothing
 
 
-setShown : Shown -> IO a h ()
+setShown : Shown -> IO a ()
 setShown shown =
     IO.sequence
         [ IO.when (not (showsStdOut shown)) <| \() -> Terminal.clearStdOut
@@ -463,14 +463,14 @@ setShown shown =
         ]
 
 
-modifyShown : (Shown -> Shown) -> IO a h ()
+modifyShown : (Shown -> Shown) -> IO a ()
 modifyShown f =
     IO.bind (IO.getLens lensShown) <|
         \shown ->
             setShown (f shown)
 
 
-ifReplNotShown : IO a h () -> IO a h ()
+ifReplNotShown : IO a () -> IO a ()
 ifReplNotShown io =
     IO.bind (IO.getLens lensShown) <|
         \shown ->
@@ -504,7 +504,7 @@ showsRepl shown =
             True
 
 
-setShownReplInput : Maybe Terminal.Repl.InterpreterInput -> IO a h ()
+setShownReplInput : Maybe Terminal.Repl.InterpreterInput -> IO a ()
 setShownReplInput maybeInterpreterInput =
     IO.modifyLens lensShown <|
         \shown ->
@@ -538,7 +538,7 @@ showsStdOut shown =
             True
 
 
-showFile : FileName -> IO a h ()
+showFile : FileName -> IO a ()
 showFile fileName =
     ifReplNotShown <|
         IO.bind (IO.liftA2 Tuple.pair (toPath fileName) (IO.getLens lensShown)) <|
@@ -555,7 +555,7 @@ showFile fileName =
                         showFileContents filePath (initialModeFor filePath)
 
 
-toggleShowMode : IO a h ()
+toggleShowMode : IO a ()
 toggleShowMode =
     IO.bind (IO.getLens lensShown) <|
         \shown ->
@@ -573,7 +573,7 @@ toggleShowMode =
                     IO.return ()
 
 
-showFileContents : FilePath -> ShowMode -> IO a h ()
+showFileContents : FilePath -> ShowMode -> IO a ()
 showFileContents filePath mode =
     IO.bind (getFileContents filePath mode) <|
         \contentResult ->
@@ -585,7 +585,7 @@ showFileContents filePath mode =
                     showError (Exit.reactorToReport error)
 
 
-getFileContents : FilePath -> ShowMode -> IO a h (Either Exit.Reactor FileContents)
+getFileContents : FilePath -> ShowMode -> IO a (Either Exit.Reactor FileContents)
 getFileContents filePath mode =
     case mode of
         AsText ->
@@ -601,7 +601,7 @@ getFileContents filePath mode =
                 |> IO.fmap (Either.fmap ElmContents)
 
 
-setFileContents : String -> IO a h ()
+setFileContents : String -> IO a ()
 setFileContents contents =
     IO.modifyLens lensShown <|
         \shown ->
@@ -651,7 +651,7 @@ extensionsOfExecutableFile =
     Set.fromList [ "elm", "js" ]
 
 
-showError : Report -> IO a h ()
+showError : Report -> IO a ()
 showError report =
     setShown <| ShowError (Exit.toClient report)
 
@@ -660,14 +660,14 @@ showError report =
 -- JAVASCRIPT
 
 
-getExecutableJavaScript : FilePath -> IO a h (Either Exit.Reactor String)
+getExecutableJavaScript : FilePath -> IO a (Either Exit.Reactor String)
 getExecutableJavaScript filePath =
     IO.rmap (getJavaScript filePath) <|
         Either.fmap <|
             \javaScript -> javaScript ++ startElmCommand idRecord.elmResultId filePath
 
 
-getJavaScript : FilePath -> IO a h (Either Exit.Reactor String)
+getJavaScript : FilePath -> IO a (Either Exit.Reactor String)
 getJavaScript filePath =
     if getExtension filePath == "elm" then
         elmReactor filePath
@@ -733,7 +733,7 @@ this.removeAttribute('code');
 -- REGISTRY
 
 
-loadRegistry : IO a h ()
+loadRegistry : IO a ()
 loadRegistry =
     IO.bind Http.getManager <|
         \manager ->
@@ -749,7 +749,7 @@ loadRegistry =
                                     updateRegistry manager cache registry
 
 
-fetchRegistry : Http.Manager -> Stuff.PackageCache -> IO a h ()
+fetchRegistry : Http.Manager -> Stuff.PackageCache -> IO a ()
 fetchRegistry manager cache =
     IO.sequence
         [ Terminal.clearPutLine "fetching registry"
@@ -758,7 +758,7 @@ fetchRegistry manager cache =
         ]
 
 
-showRegistryFetchResult : Either Exit.RegistryProblem Registry.Registry -> IO a h ()
+showRegistryFetchResult : Either Exit.RegistryProblem Registry.Registry -> IO a ()
 showRegistryFetchResult fetchResult =
     case fetchResult of
         Right (Registry.Registry count packages) ->
@@ -770,7 +770,7 @@ showRegistryFetchResult fetchResult =
             showError <| Exit.toRegistryProblemReport "Error" error "Fetch"
 
 
-updateRegistry : Http.Manager -> Stuff.PackageCache -> Registry.Registry -> IO a h ()
+updateRegistry : Http.Manager -> Stuff.PackageCache -> Registry.Registry -> IO a ()
 updateRegistry manager cache oldRegistry =
     IO.sequence
         [ Terminal.clearPutLine "updating registry"
@@ -779,7 +779,7 @@ updateRegistry manager cache oldRegistry =
         ]
 
 
-showRegistryUpdateResult : Registry.Registry -> Either Exit.RegistryProblem Registry.Registry -> IO a h ()
+showRegistryUpdateResult : Registry.Registry -> Either Exit.RegistryProblem Registry.Registry -> IO a ()
 showRegistryUpdateResult oldRegistry updateResult =
     case ( oldRegistry, updateResult ) of
         ( Registry.Registry oldCount oldPackages, Right (Registry.Registry count packages) ) ->
@@ -797,7 +797,7 @@ showRegistryUpdateResult oldRegistry updateResult =
 -- STUFF
 
 
-withRoot : (FilePath -> IO a h ()) -> IO a h ()
+withRoot : (FilePath -> IO a ()) -> IO a ()
 withRoot callback =
     IO.bind Stuff.findRoot <|
         \maybeRoot ->
@@ -813,7 +813,7 @@ withRoot callback =
 -- OUTLINE
 
 
-parseOutline : IO a h ()
+parseOutline : IO a ()
 parseOutline =
     withRoot <|
         \root ->
@@ -823,7 +823,7 @@ parseOutline =
                 ]
 
 
-showOutlineResult : Either Exit.Outline Outline.Outline -> IO a h ()
+showOutlineResult : Either Exit.Outline Outline.Outline -> IO a ()
 showOutlineResult readresult =
     case readresult of
         Right outline ->
@@ -837,7 +837,7 @@ showOutlineResult readresult =
 -- SOLVER
 
 
-validateOutline : IO a h ()
+validateOutline : IO a ()
 validateOutline =
     withRoot <|
         \root ->
@@ -847,7 +847,7 @@ validateOutline =
                 ]
 
 
-showValidateResult : Either Exit.Details Details.ValidOutline -> IO a h ()
+showValidateResult : Either Exit.Details Details.ValidOutline -> IO a ()
 showValidateResult verifyResult =
     case verifyResult of
         Right validOutline ->
@@ -861,7 +861,7 @@ showValidateResult verifyResult =
 -- DETAILS
 
 
-loadDetails : IO a h ()
+loadDetails : IO a ()
 loadDetails =
     withRoot <|
         \root ->
@@ -872,7 +872,7 @@ loadDetails =
                 ]
 
 
-showDetailsResult : Either Exit.Details Details.Details -> IO a h ()
+showDetailsResult : Either Exit.Details Details.Details -> IO a ()
 showDetailsResult loadresult =
     case loadresult of
         Right (Details.Details _ _ _ locals foreigns _) ->
@@ -888,7 +888,7 @@ showDetailsResult loadresult =
 -- BUILD
 
 
-buildFromPaths : String -> IO a h ()
+buildFromPaths : String -> IO a ()
 buildFromPaths string =
     withRoot <|
         \root ->
@@ -909,7 +909,7 @@ buildFromPaths string =
                 ]
 
 
-showBuildResult : Either Exit.BuildProblem Build.Artifacts -> IO a h ()
+showBuildResult : Either Exit.BuildProblem Build.Artifacts -> IO a ()
 showBuildResult buildResult =
     case buildResult of
         Right (Build.Artifacts _ dependencies roots modules) ->
@@ -926,12 +926,12 @@ showBuildResult buildResult =
 -- ELM
 
 
-elmMain : IO a h ()
+elmMain : IO a ()
 elmMain =
     Terminal.Main.runMain
 
 
-elmInit : IO a h ()
+elmInit : IO a ()
 elmInit =
     IO.bind Terminal.Init.run <|
         \result ->
@@ -943,7 +943,7 @@ elmInit =
                     showError <| Exit.initToReport error
 
 
-elmInstall : String -> IO a h ()
+elmInstall : String -> IO a ()
 elmInstall packageName =
     case Helpers.parsePackage packageName of
         Nothing ->
@@ -964,7 +964,7 @@ elmInstall packageName =
                                             showError <| Exit.installToReport error
 
 
-elmMake : String -> String -> IO a h ()
+elmMake : String -> String -> IO a ()
 elmMake mode string =
     IO.bind (toPath string) <|
         \inputPath ->
@@ -1002,7 +1002,7 @@ elmMake mode string =
                                     showError <| Exit.makeToReport error
 
 
-elmReactor : FilePath -> IO a h (Either Exit.Reactor String)
+elmReactor : FilePath -> IO a (Either Exit.Reactor String)
 elmReactor filePath =
     Terminal.Reactor.compile filePath
 
@@ -1011,7 +1011,7 @@ elmReactor filePath =
 -- REPL
 
 
-elmRepl : Terminal.Repl.Mode -> Maybe String -> Bool -> IO a h ()
+elmRepl : Terminal.Repl.Mode -> Maybe String -> Bool -> IO a ()
 elmRepl mode maybeTag htmlEnabled =
     IO.sequence
         [ modifyShown (addRepl mode maybeTag)
@@ -1065,7 +1065,7 @@ closeRepl shown =
             ShowNothing
 
 
-interpreter : Terminal.Repl.Interpreter a (LocalState a h) h
+interpreter : Terminal.Repl.Interpreter a (LocalState a)
 interpreter input =
     IO.bindSequence
         [ IO.when (isHtmlInput input) (\() -> Terminal.putLine "")
@@ -1087,7 +1087,7 @@ isHtmlInput input =
             False
 
 
-handleOutput : Json.Decode.Decoder (IO a h ())
+handleOutput : Json.Decode.Decoder (IO a ())
 handleOutput =
     Json.Decode.succeed
         (\output forceQuit ->
@@ -1104,7 +1104,7 @@ handleOutput =
         |> jsonAndMap (Json.Decode.at [ "detail", "force_quit_" ] Json.Decode.bool)
 
 
-jumpToBottom : IO a h ()
+jumpToBottom : IO a ()
 jumpToBottom =
     Dom.getViewportOf idRecord.replItemsId
         |> Task.andThen (\info -> Dom.setViewportOf idRecord.replItemsId 0 info.scene.height)
@@ -1116,7 +1116,7 @@ jumpToBottom =
 -- BREAKPOINTS
 
 
-createBreakpointPackageIfNecessary : String -> Pkg.Name -> IO a h ()
+createBreakpointPackageIfNecessary : String -> Pkg.Name -> IO a ()
 createBreakpointPackageIfNecessary name pkg =
     if name == "elm/breakpoint" then
         createBreakpointPackage pkg
@@ -1125,7 +1125,7 @@ createBreakpointPackageIfNecessary name pkg =
         IO.noOp
 
 
-createBreakpointPackage : Pkg.Name -> IO a h ()
+createBreakpointPackage : Pkg.Name -> IO a ()
 createBreakpointPackage pkg =
     IO.bind Stuff.getPackageCache <|
         \cache ->
@@ -1768,7 +1768,7 @@ var $elm$browser$Browser$sandbox_async = function (impl) {
 """
 
 
-handleBreakpoint : Json.Decode.Decoder (IO a h ())
+handleBreakpoint : Json.Decode.Decoder (IO a ())
 handleBreakpoint =
     Json.Decode.succeed
         (\moduleName bpName tag ->
@@ -1803,12 +1803,12 @@ type alias File =
     }
 
 
-getRevCwd : State a h -> TList FileName
+getRevCwd : State a -> TList FileName
 getRevCwd =
     SysFile.getCurrentDirectoryNamesPure
 
 
-getDirsAndFiles : Time.Zone -> State a h -> ( TList File, TList File )
+getDirsAndFiles : Time.Zone -> State a -> ( TList File, TList File )
 getDirsAndFiles zone state =
     SysFile.getCurrentDirectoryEntriesPure state <|
         \name size time ->
@@ -1828,7 +1828,7 @@ isRunnable fileName =
 -- VIEW
 
 
-view : State a h -> Browser.Document (IO a h ())
+view : State a -> Browser.Document (IO a ())
 view state =
     let
         revCwd =
@@ -1854,7 +1854,7 @@ view state =
     }
 
 
-viewLeftColumn : List File -> List File -> String -> String -> Html (IO a h ())
+viewLeftColumn : List File -> List File -> String -> String -> Html (IO a ())
 viewLeftColumn dirs files prefill command =
     Html.section [ Html.Attributes.class "left-column" ]
         [ viewCommand prefill command
@@ -1862,7 +1862,7 @@ viewLeftColumn dirs files prefill command =
         ]
 
 
-viewRightColumn : IdRecord -> Shown -> TList Terminal.Output -> Html (IO a h ())
+viewRightColumn : IdRecord -> Shown -> TList Terminal.Output -> Html (IO a ())
 viewRightColumn ids shown stdOut =
     Html.section [ Html.Attributes.class "right-column" ] <|
         case shown of
@@ -1892,7 +1892,7 @@ viewRightColumn ids shown stdOut =
 -- VIEW COMMAND
 
 
-viewCommand : String -> String -> Html (IO a h ())
+viewCommand : String -> String -> Html (IO a ())
 viewCommand prefill command =
     Skeleton.box
         { title = "Command"
@@ -1916,7 +1916,7 @@ viewCommand prefill command =
 -- VIEW FILES
 
 
-viewFiles : TList File -> TList File -> Html (IO a h ())
+viewFiles : TList File -> TList File -> Html (IO a ())
 viewFiles dirs files =
     Skeleton.box
         { title = "File Navigation"
@@ -1928,14 +1928,14 @@ viewFiles dirs files =
         }
 
 
-viewDir : File -> TList (Html (IO a h ()))
+viewDir : File -> TList (Html (IO a ()))
 viewDir { name, size, time } =
     [ Html.a [ Html.Events.onClick <| pushDirectory name ] [ Icon.folder, Html.text name ]
     , Html.text <| String.fromInt size ++ " " ++ time
     ]
 
 
-viewFile : File -> TList (Html (IO a h ()))
+viewFile : File -> TList (Html (IO a ()))
 viewFile { name, size, time } =
     [ Html.a [ Html.Events.onClick (showFile name) ] [ Icon.lookup name, Html.text name ]
     , Html.text <| String.fromInt size ++ " " ++ time
@@ -1946,7 +1946,7 @@ viewFile { name, size, time } =
 -- VIEW ERROR
 
 
-viewError : Error.Error -> Html (IO a h ())
+viewError : Error.Error -> Html (IO a ())
 viewError error =
     Skeleton.styledBox
         { title = "Error"
@@ -1965,7 +1965,7 @@ viewError error =
 -- VIEW STDOUT
 
 
-viewStdOut : TList Terminal.Output -> Html (IO a h ())
+viewStdOut : TList Terminal.Output -> Html (IO a ())
 viewStdOut stdOut =
     Skeleton.box
         { title = "Output"
@@ -1975,7 +1975,7 @@ viewStdOut stdOut =
         }
 
 
-viewOutput : Terminal.Output -> List (Html (IO a h ()))
+viewOutput : Terminal.Output -> List (Html (IO a ()))
 viewOutput output =
     [ Html.div
         [ Html.Attributes.style "display" "inline-block"
@@ -1991,7 +1991,7 @@ viewOutput output =
 -- VIEW REPL
 
 
-viewRepl : IdRecord -> TList Terminal.Output -> Bool -> Maybe String -> Maybe String -> Maybe Terminal.Repl.InterpreterInput -> Html (IO a h ())
+viewRepl : IdRecord -> TList Terminal.Output -> Bool -> Maybe String -> Maybe String -> Maybe Terminal.Repl.InterpreterInput -> Html (IO a ())
 viewRepl ids stdOut flashed openedModule maybeTag maybeInterpreterInput =
     Skeleton.styledBox
         { title = replTitle openedModule maybeTag
@@ -2019,7 +2019,7 @@ replTitle maybeModuleName maybeTag =
             "Breakpoint in " ++ moduleName ++ ": " ++ tag
 
 
-viewInterpreterInput : IdRecord -> Maybe Terminal.Repl.InterpreterInput -> TList (TList (Html (IO a h ())))
+viewInterpreterInput : IdRecord -> Maybe Terminal.Repl.InterpreterInput -> TList (TList (Html (IO a ())))
 viewInterpreterInput ids maybeJavaScript =
     case maybeJavaScript of
         Nothing ->
@@ -2052,7 +2052,7 @@ viewInterpreterInput ids maybeJavaScript =
 -- VIEW FILE CONTENTS
 
 
-viewFileContents : IdRecord -> FilePath -> FileContents -> Bool -> Html (IO a h ())
+viewFileContents : IdRecord -> FilePath -> FileContents -> Bool -> Html (IO a ())
 viewFileContents ids filePath contents editable =
     let
         ( _, fileName ) =

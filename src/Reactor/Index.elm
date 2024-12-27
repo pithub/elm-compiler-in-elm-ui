@@ -1067,14 +1067,24 @@ closeRepl shown =
 
 interpreter : Terminal.Repl.Interpreter a (LocalState a)
 interpreter input =
-    IO.bindSequence
+    IO.sequence
         [ IO.when (isHtmlInput input) (\() -> Terminal.putLine "")
         , setShownReplInput (Just input)
         , IO.sleep 10
         , IO.when (isHtmlInput input) (\() -> setShownReplInput Nothing)
+        , IO.when (not (isValueInput input)) (\() -> continueRepl)
         , jumpToBottom
         ]
-        (IO.return Terminal.Repl.InterpreterSuccess)
+
+
+isValueInput : Terminal.Repl.InterpreterInput -> Bool
+isValueInput input =
+    case input of
+        Terminal.Repl.InterpretValue _ ->
+            True
+
+        _ ->
+            False
 
 
 isHtmlInput : Terminal.Repl.InterpreterInput -> Bool
@@ -1092,16 +1102,25 @@ handleOutput =
     Json.Decode.succeed
         (\output forceQuit ->
             if forceQuit then
-                Terminal.setNextInput ":force_quit_"
+                IO.sequence
+                    [ Terminal.setNextInput ":force_quit_"
+                    , continueRepl
+                    ]
 
             else
                 IO.sequence
                     [ setShownReplInput Nothing
                     , Terminal.putLine output
+                    , continueRepl
                     ]
         )
         |> jsonAndMap (Json.Decode.at [ "detail", "result" ] Json.Decode.string)
         |> jsonAndMap (Json.Decode.at [ "detail", "force_quit_" ] Json.Decode.bool)
+
+
+continueRepl : IO a ()
+continueRepl =
+    Terminal.Repl.continueInterpreter Terminal.Repl.InterpreterSuccess
 
 
 jumpToBottom : IO a ()

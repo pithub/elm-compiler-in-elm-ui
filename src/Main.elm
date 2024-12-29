@@ -33,8 +33,6 @@ type alias Model =
 initialModel : Model
 initialModel =
     Global.State
-        -- App1
-        ()
         -- fileSystem
         SysFile.initialState
         -- details
@@ -45,10 +43,12 @@ initialModel =
         Generate.initialState
         -- terminal
         Terminal.initialState
-        -- reactor
-        Reactor.initialState
         -- repl
         Repl.initialLocalState
+        -- reactor
+        Reactor.initialState
+        -- App1
+        ()
 
 
 

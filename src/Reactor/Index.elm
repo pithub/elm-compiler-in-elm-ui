@@ -706,15 +706,26 @@ trimUntil pattern string =
             String.dropLeft (index + String.length pattern) string
 
 
-valueOutputCode : String -> String
-valueOutputCode replResultEvent =
+valueOutputWrapper : String -> String -> String
+valueOutputWrapper replResultEvent javaScript =
     """
+let detail = null;
+try {"""
+        ++ javaScript
+        ++ """
+    detail = { result: _result, force_quit_: force_quit_ };
+} catch (error) {
+    detail = { error: error.message };
+}
 window.requestAnimationFrame(() =>
-    this.dispatchEvent(new CustomEvent('""" ++ replResultEvent ++ """', {
-        bubbles: true,
-        cancelable: true,
-        detail: { result: _result, force_quit_: force_quit_ }
-    }))
+    this.dispatchEvent(new CustomEvent('"""
+        ++ replResultEvent
+        ++ """', {
+            bubbles: true,
+            cancelable: true,
+            detail: detail
+        })
+    )
 );
 """
 
@@ -1099,6 +1110,14 @@ isHtmlInput input =
 
 handleOutput : Json.Decode.Decoder (IO a ())
 handleOutput =
+    Json.Decode.oneOf
+        [ handleSuccessOutput
+        , handleErrorOutput
+        ]
+
+
+handleSuccessOutput : Json.Decode.Decoder (IO a ())
+handleSuccessOutput =
     Json.Decode.succeed
         (\output forceQuit ->
             if forceQuit then
@@ -1116,6 +1135,19 @@ handleOutput =
         )
         |> jsonAndMap (Json.Decode.at [ "detail", "result" ] Json.Decode.string)
         |> jsonAndMap (Json.Decode.at [ "detail", "force_quit_" ] Json.Decode.bool)
+
+
+handleErrorOutput : Json.Decode.Decoder (IO a ())
+handleErrorOutput =
+    Json.Decode.succeed
+        (\error ->
+            IO.sequence
+                [ setShownReplInput Nothing
+                , Terminal.putLine error
+                , Terminal.Repl.continueWithInterpreterResult Terminal.Repl.InterpreterFailure
+                ]
+        )
+        |> jsonAndMap (Json.Decode.at [ "detail", "error" ] Json.Decode.string)
 
 
 continueRepl : IO a ()
@@ -2047,7 +2079,7 @@ viewInterpreterInput ids maybeJavaScript =
         Just (Terminal.Repl.InterpretValue javaScript) ->
             [ [ Html.node "elm-code"
                     [ Html.Attributes.attribute "code"
-                        (javaScript ++ valueOutputCode ids.replResultEvent)
+                        (valueOutputWrapper ids.replResultEvent javaScript)
                     , Html.Events.on ids.replResultEvent handleOutput
                     ]
                     []

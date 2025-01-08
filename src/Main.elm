@@ -9,6 +9,7 @@ import Extra.System.IO as IO
 import Global
 import Reactor.Index as Reactor
 import Terminal.Command as Terminal
+import Terminal.Repl as Repl
 
 
 main : Program () Model Msg
@@ -26,14 +27,12 @@ main =
 
 
 type alias Model =
-    Reactor.State () ()
+    Reactor.State ()
 
 
 initialModel : Model
 initialModel =
     Global.State
-        -- App1
-        ()
         -- fileSystem
         SysFile.initialState
         -- details
@@ -44,9 +43,11 @@ initialModel =
         Generate.initialState
         -- terminal
         Terminal.initialState
+        -- repl
+        Repl.initialLocalState
         -- reactor
         Reactor.initialState
-        -- App2
+        -- App1
         ()
 
 

@@ -99,22 +99,22 @@ list start =
     P.oneOf E.ListOpen
       [ P.bind (P.specialize E.ListExpr expression) <| \(entry, end) ->
         P.bind (Space.checkIndent end E.ListIndentEnd) <| \_ ->
-        chompListEnd start [entry]
+        P.loop (chompListEnd start) [entry]
       , P.bind (P.word1 0x5D {-]-} E.ListOpen) <| \_ ->
         P.addEnd start (Src.CList [])
       ]
 
 
-chompListEnd : A.Position -> TList Src.Expr -> P.Parser E.TList Src.Expr
+chompListEnd : A.Position -> TList Src.Expr -> P.Parser E.TList (P.Step (TList Src.Expr) Src.Expr)
 chompListEnd start entries =
   P.oneOf E.ListEnd
     [ P.bind (P.word1 0x2C {-,-} E.ListEnd) <| \_ ->
       P.bind (Space.chompAndCheckIndent E.ListSpace E.ListIndentExpr) <| \_ ->
       P.bind (P.specialize E.ListExpr expression) <| \(entry, end) ->
       P.bind (Space.checkIndent end E.ListIndentEnd) <| \_ ->
-      chompListEnd start (entry::entries)
+      P.return (P.Loop (entry::entries))
     , P.bind (P.word1 0x5D {-]-} E.ListEnd) <| \_ ->
-      P.addEnd start (Src.CList (MList.reverse entries))
+      P.fmap P.Done (P.addEnd start (Src.CList (MList.reverse entries)))
     ]
 
 

@@ -136,7 +136,9 @@ type alias IO v =
 initialIO : IO Bool -> IO ()
 initialIO htmlEnabled =
     IO.sequence
-        [ setHtmlEnabled htmlEnabled
+        [ Http.setPrefix (Just "/proxy/")
+        , SysFile.setMountPrefix (Just "/query/")
+        , setHtmlEnabled htmlEnabled
         , getTimeZone
         , commandLoop
         ]

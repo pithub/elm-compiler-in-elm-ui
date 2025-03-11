@@ -17,16 +17,16 @@ import Extra.Type.Either exposing (Either)
 import Extra.Type.Map as Map
 
 
-type alias IO a d e f g h v =
-    IO.IO (Details.State a d e f g h) v
+type alias IO d e f g h v =
+    IO.IO (Details.State d e f g h) v
 
 
-validate : FilePath -> IO a d e f g h (Either Exit.Details Details.ValidOutline)
+validate : FilePath -> IO d e f g h (Either Exit.Details Details.ValidOutline)
 validate root =
     Task.run (validateTask root)
 
 
-validateTask : FilePath -> Task (Either Exit.Details Details.ValidOutline) a d e f g h Details.ValidOutline
+validateTask : FilePath -> Task (Either Exit.Details Details.ValidOutline) d e f g h Details.ValidOutline
 validateTask root =
     Task.bind (initEnv root) <|
         \( env, outline ) ->
@@ -38,12 +38,12 @@ validateTask root =
                     verifyApp env app
 
 
-solverEnv : Task z a d e f g h Solver.Env
+solverEnv : Task z d e f g h Solver.Env
 solverEnv =
     Task.eio Exit.DetailsCannotGetRegistry Solver.initEnv
 
 
-readOutline : FilePath -> Task z a d e f g h Outline.Outline
+readOutline : FilePath -> Task z d e f g h Outline.Outline
 readOutline root =
     Task.eio Exit.DetailsBadOutline (Outline.read root)
 
@@ -56,7 +56,7 @@ type Env
     = Env {- root -} FilePath {- cache -} Stuff.PackageCache {- manager -} Http.Manager {- connection -} Solver.Connection {- registry -} Registry.Registry
 
 
-initEnv : FilePath -> Task z a d e f g h ( Env, Outline.Outline )
+initEnv : FilePath -> Task z d e f g h ( Env, Outline.Outline )
 initEnv root =
     Task.bind solverEnv <|
         \(Solver.Env cache manager connection registry) ->
@@ -69,11 +69,11 @@ initEnv root =
 -- VERIFY PROJECT
 
 
-type alias Task z a d e f g h v =
-    Task.Task z (Details.State a d e f g h) Exit.Details v
+type alias Task z d e f g h v =
+    Task.Task z (Details.State d e f g h) Exit.Details v
 
 
-verifyPkg : Env -> Outline.PkgOutline -> Task z a d e f g h Details.ValidOutline
+verifyPkg : Env -> Outline.PkgOutline -> Task z d e f g h Details.ValidOutline
 verifyPkg env (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) =
     if Con.goodElm elm then
         Task.bind (Task.andThen (verifyConstraints env) <| union noDups direct testDirect) <|
@@ -91,7 +91,7 @@ verifyPkg env (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) =
         Task.throw <| Exit.DetailsBadElmInPkg elm
 
 
-verifyApp : Env -> Outline.AppOutline -> Task z a d e f g h Details.ValidOutline
+verifyApp : Env -> Outline.AppOutline -> Task z d e f g h Details.ValidOutline
 verifyApp env ((Outline.AppOutline elmVersion srcDirs _ _ _ _) as outline) =
     if elmVersion == V.compiler then
         Task.bind (checkAppDeps outline) <|
@@ -108,7 +108,7 @@ verifyApp env ((Outline.AppOutline elmVersion srcDirs _ _ _ _) as outline) =
         Task.throw <| Exit.DetailsBadElmInAppOutline elmVersion
 
 
-checkAppDeps : Outline.AppOutline -> Task z a d e f g h (Map.Map Pkg.Comparable V.Version)
+checkAppDeps : Outline.AppOutline -> Task z d e f g h (Map.Map Pkg.Comparable V.Version)
 checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
     Task.bind (union allowEqualDups indirect testDirect) <|
         \x ->
@@ -121,7 +121,7 @@ checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
 -- VERIFY CONSTRAINTS
 
 
-verifyConstraints : Env -> Map.Map Pkg.Comparable Con.Constraint -> Task z a d e f g h (Map.Map Pkg.Comparable Solver.Details)
+verifyConstraints : Env -> Map.Map Pkg.Comparable Con.Constraint -> Task z d e f g h (Map.Map Pkg.Comparable Solver.Details)
 verifyConstraints (Env _ cache _ connection registry) constraints =
     Task.bind (Task.io <| Solver.verify cache connection registry constraints) <|
         \result ->
@@ -143,17 +143,17 @@ verifyConstraints (Env _ cache _ connection registry) constraints =
 -- UNION
 
 
-union : (comparable -> v -> v -> Task z a d e f g h v) -> Map.Map comparable v -> Map.Map comparable v -> Task z a d e f g h (Map.Map comparable v)
+union : (comparable -> v -> v -> Task z d e f g h v) -> Map.Map comparable v -> Map.Map comparable v -> Task z d e f g h (Map.Map comparable v)
 union tieBreaker deps1 deps2 =
     Map.mergeA Task.pure Task.liftA2 (Map.preserveMissing Task.pure) (Map.preserveMissing Task.pure) (Map.zipWithAMatched Task.fmap tieBreaker) deps1 deps2
 
 
-noDups : comparable -> v -> v -> Task z a d e f g h v
+noDups : comparable -> v -> v -> Task z d e f g h v
 noDups _ _ _ =
     Task.throw Exit.DetailsHandEditedDependencies
 
 
-allowEqualDups : comparable -> v -> v -> Task z a d e f g h v
+allowEqualDups : comparable -> v -> v -> Task z d e f g h v
 allowEqualDups _ v1 v2 =
     if v1 == v2 then
         Task.return v1

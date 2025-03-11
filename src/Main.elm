@@ -4,6 +4,7 @@ import Browser
 import Builder.Build as Build
 import Builder.Elm.Details as Details
 import Builder.Generate as Generate
+import Builder.Http as Http
 import Extra.System.File as SysFile
 import Extra.System.IO as IO
 import Global
@@ -27,28 +28,20 @@ main =
 
 
 type alias Model =
-    Reactor.State ()
+    Reactor.State
 
 
 initialModel : Model
 initialModel =
     Global.State
-        -- fileSystem
         SysFile.initialState
-        -- details
+        Http.initialState
         Details.initialState
-        -- build
         Build.initialState
-        -- generate
         Generate.initialState
-        -- terminal
         Terminal.initialState
-        -- repl
         Repl.initialLocalState
-        -- reactor
         Reactor.initialState
-        -- App1
-        ()
 
 
 

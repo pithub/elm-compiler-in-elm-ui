@@ -1063,7 +1063,7 @@ elmRepl mode maybeTag htmlEnabled =
 addRepl : Repl.Mode -> Maybe String -> Shown -> Shown
 addRepl mode maybeTag shown =
     case ( mode, shown ) of
-        ( Repl.Breakpoint moduleName _ _, ShowFile filePath (ElmContents contents) ) ->
+        ( Repl.Breakpoint moduleName _, ShowFile filePath (ElmContents contents) ) ->
             ShowFileAndRepl filePath contents moduleName False maybeTag Nothing
 
         ( Repl.Module moduleName, _ ) ->
@@ -1847,7 +1847,7 @@ handleBreakpoint =
                 [ IO.sleep 100
                 , Terminal.setNextInput "bpArg"
                 , elmRepl
-                    (Repl.Breakpoint moduleName idRecord.elmCodeId bpName)
+                    (Repl.Breakpoint moduleName (breakpointDecls idRecord.elmCodeId bpName))
                     (Just tag)
                     True
                 ]
@@ -1855,6 +1855,16 @@ handleBreakpoint =
         |> jsonAndMap (Json.Decode.at [ "detail", "module" ] Json.Decode.string)
         |> jsonAndMap (Json.Decode.at [ "detail", "name" ] Json.Decode.string)
         |> jsonAndMap (Json.Decode.at [ "detail", "tag" ] Json.Decode.string)
+
+
+breakpointDecls : String -> String -> Map.Map String String
+breakpointDecls id bpName =
+    Map.fromList
+        [ ( "bp", "bp = Breakpoint.initRepl \"" ++ id ++ "\" " ++ bpName ++ "\n" )
+        , ( "bpArg", "bpArg = case Breakpoint.arg bp of\n  Just x -> x\n  _ -> Debug.todo \"no suspended Breakpoint\"\n" )
+        , ( "bpTag", "bpTag = case Breakpoint.tag bp of\n  Just x -> x\n  _ -> Debug.todo \"no suspended Breakpoint\"\n" )
+        , ( "force_quit_", "force_quit_ () = not (Breakpoint.isSuspended bp)\n" )
+        ]
 
 
 jsonAndMap : Applicative.AndMap (Json.Decode.Decoder a) (Json.Decode.Decoder (a -> b)) (Json.Decode.Decoder b)

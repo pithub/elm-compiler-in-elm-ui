@@ -195,8 +195,11 @@ executeCommand command =
           else if command == "" || command == "h" then
             showHelp
 
-          else if String.startsWith "m " command then
-            mount (String.dropLeft 2 command |> String.split " ")
+          else if String.startsWith "mr " command then
+            mountRemote (String.dropLeft 3 command |> String.split " ")
+
+          else if String.startsWith "ms " command then
+            mountStatic (String.dropLeft 3 command |> String.split " ")
 
           else if String.startsWith "r " command then
             removeEntry (String.dropLeft 2 command)
@@ -302,7 +305,8 @@ File System
 <file> - create <file>
 d <path> - create directory <path>
 r <path> - remove <path>
-m <mount> <target> - mount <mount> to <target>
+mr <mount> <target> - mount <mount> to <target>
+ms <mount> <target> - mount statically prepared <mount> to <target>
 
 
 Other
@@ -377,11 +381,21 @@ getExtension filePath =
             Tuple.second (SysFile.splitExtension name)
 
 
-mount : TList String -> IO ()
-mount strings =
+mountRemote : TList String -> IO ()
+mountRemote strings =
     case strings of
         [ mountPoint, target ] ->
-            IO.bind (toPath target) (SysFile.mount mountPoint)
+            IO.bind (toPath target) (SysFile.mountRemote mountPoint)
+
+        _ ->
+            IO.noOp
+
+
+mountStatic : TList String -> IO ()
+mountStatic strings =
+    case strings of
+        [ mountPoint, target ] ->
+            IO.bind (toPath target) (SysFile.mountStatic mountPoint)
 
         _ ->
             IO.noOp

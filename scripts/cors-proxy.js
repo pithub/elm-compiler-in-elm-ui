@@ -3,7 +3,7 @@ const cors = require('cors')
 const { createProxyMiddleware } = require('http-proxy-middleware')
 const fs = require('fs')
 const os = require('os');
-const staticDir = require('./static-dir');
+const staticDir = require('../compiler/scripts/static-dir');
 
 const app = express()
 

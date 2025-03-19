@@ -4,7 +4,6 @@ import Builder.Deps.Registry as Registry
 import Builder.Deps.Solver as Solver
 import Builder.Elm.Details as Details
 import Builder.Elm.Outline as Outline
-import Builder.Http as Http
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
@@ -53,16 +52,16 @@ readOutline root =
 
 
 type Env
-    = Env {- root -} FilePath {- cache -} Stuff.PackageCache {- manager -} Http.Manager {- connection -} Solver.Connection {- registry -} Registry.Registry
+    = Env {- cache -} Stuff.PackageCache {- connection -} Solver.Connection {- registry -} Registry.Registry
 
 
 initEnv : FilePath -> Task z d e f g h ( Env, Outline.Outline )
 initEnv root =
     Task.bind solverEnv <|
-        \(Solver.Env cache manager connection registry) ->
+        \(Solver.Env cache _ connection registry) ->
             Task.bind (readOutline root) <|
                 \outline ->
-                    Task.return <| ( Env root cache manager connection registry, outline )
+                    Task.return <| ( Env cache connection registry, outline )
 
 
 
@@ -122,7 +121,7 @@ checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
 
 
 verifyConstraints : Env -> Map.Map Pkg.Comparable Con.Constraint -> Task z d e f g h (Map.Map Pkg.Comparable Solver.Details)
-verifyConstraints (Env _ cache _ connection registry) constraints =
+verifyConstraints (Env cache connection registry) constraints =
     Task.bind (Task.io <| Solver.verify cache connection registry constraints) <|
         \result ->
             case result of

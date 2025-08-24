@@ -21,6 +21,7 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Parse.Primitives as P
 import Extra.Data.Binary as B
+import Extra.System.Dir as Dir
 import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either(..))
 import Extra.Type.List as MList exposing (TList)
@@ -32,7 +33,7 @@ import Extra.Type.Map as Map
 
 
 type alias IO c d e f g h v =
-  IO.IO (Http.State c d e f g h) v
+  IO.IO (Dir.GlobalState c d e f g h) v
 
 
 
@@ -191,9 +192,11 @@ post manager path decoder callback =
 -- BINARY
 
 
+bRegistry : B.Binary Registry
 bRegistry = B.bin2 Registry (\(Registry a b) -> B.T2 a b)
   B.bWord64 (B.bMap Pkg.bComparable bKnownVersions)
 
 
+bKnownVersions : B.Binary KnownVersions
 bKnownVersions = B.bin2 KnownVersions (\(KnownVersions a b) -> B.T2 a b)
   V.bVersion (B.bTList V.bVersion)

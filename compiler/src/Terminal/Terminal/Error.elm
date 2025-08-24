@@ -24,7 +24,7 @@ import Terminal.Terminal.Internal as Internal
 
 
 type alias IO g h v =
-  IO.IO (Terminal.Command.State g h) v
+  IO.IO (Terminal.Command.GlobalState g h) v
 
 
 

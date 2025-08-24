@@ -13,7 +13,7 @@ import Compiler.Reporting.Doc as D exposing (d, da)
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Compiler.Reporting.Suggest as Suggest
-import Extra.System.File exposing (FilePath)
+import Extra.System.Dir exposing (FilePath)
 import Extra.Type.List as MList exposing (TList)
 import Extra.Type.Map as Map
 import Extra.Type.Set as Set

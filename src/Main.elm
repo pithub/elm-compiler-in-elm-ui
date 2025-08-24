@@ -4,8 +4,8 @@ import Browser
 import Builder.Build as Build
 import Builder.Elm.Details as Details
 import Builder.Generate as Generate
-import Builder.Http as Http
-import Extra.System.File as SysFile
+import Extra.System.Config as Config
+import Extra.System.Dir as Dir
 import Extra.System.IO as IO
 import Global
 import Reactor.Index as Reactor
@@ -16,8 +16,8 @@ import Terminal.Repl as Repl
 main : Program () Model Msg
 main =
     Browser.document
-        { init = init
-        , update = update
+        { init = IO.init initialModel initialIO
+        , update = IO.update
         , subscriptions = subscriptions
         , view = view
         }
@@ -31,11 +31,11 @@ type alias Model =
     Reactor.State
 
 
-initialModel : Model
-initialModel =
+initialModel : () -> Model
+initialModel _ =
     Global.State
-        SysFile.initialState
-        Http.initialState
+        Config.initialState
+        Dir.initialState
         Details.initialState
         Build.initialState
         Generate.initialState
@@ -45,38 +45,16 @@ initialModel =
 
 
 
--- INIT
-
-
-init : () -> ( Model, Cmd Msg )
-init () =
-    update initialIO initialModel
-
-
-
--- UPDATE
+-- MSG
 
 
 type alias Msg =
     IO.IO Model ()
 
 
-initialIO : Msg
-initialIO =
+initialIO : () -> Msg
+initialIO _ =
     Reactor.initialIO (IO.return True)
-
-
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case msg model of
-        ( IO.Pure (), newModel ) ->
-            ( newModel, Cmd.none )
-
-        ( IO.ImpureCmd cmd, newModel ) ->
-            ( newModel, cmd )
-
-        ( IO.ImpureCont cont, newModel ) ->
-            update (cont identity) newModel
 
 
 

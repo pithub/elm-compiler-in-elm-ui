@@ -1,7 +1,7 @@
 module Terminal.Command exposing
-    ( LocalState
+    ( GlobalState
+    , LocalState
     , Output
-    , State
     , ask
     , clearInput
     , clearPrompt
@@ -37,8 +37,8 @@ import Time
 -- PUBLIC STATE
 
 
-type alias State g h =
-    Generate.State (LocalState g h) g h
+type alias GlobalState g h =
+    Generate.GlobalState (LocalState g h) g h
 
 
 type LocalState g h
@@ -74,42 +74,42 @@ initialState =
         Nothing
 
 
-lensStdIn : Lens (State g h) (TList (String -> IO g h ()))
+lensStdIn : Lens (GlobalState g h) (TList (String -> IO g h ()))
 lensStdIn =
     { getter = \(Global.State _ _ _ _ _ (LocalState x _ _ _ _ _) _ _) -> x
     , setter = \x (Global.State a b c d e (LocalState _ bi ci di ei fi) g h) -> Global.State a b c d e (LocalState x bi ci di ei fi) g h
     }
 
 
-lensStdOut : Lens (State g h) (TList Output)
+lensStdOut : Lens (GlobalState g h) (TList Output)
 lensStdOut =
     { getter = \(Global.State _ _ _ _ _ (LocalState _ x _ _ _ _) _ _) -> x
     , setter = \x (Global.State a b c d e (LocalState ai _ ci di ei fi) g h) -> Global.State a b c d e (LocalState ai x ci di ei fi) g h
     }
 
 
-lensPrompt : Lens (State g h) String
+lensPrompt : Lens (GlobalState g h) String
 lensPrompt =
     { getter = \(Global.State _ _ _ _ _ (LocalState _ _ x _ _ _) _ _) -> x
     , setter = \x (Global.State a b c d e (LocalState ai bi _ di ei fi) g h) -> Global.State a b c d e (LocalState ai bi x di ei fi) g h
     }
 
 
-lensInput : Lens (State g h) String
+lensInput : Lens (GlobalState g h) String
 lensInput =
     { getter = \(Global.State _ _ _ _ _ (LocalState _ _ _ x _ _) _ _) -> x
     , setter = \x (Global.State a b c d e (LocalState ai bi ci _ ei fi) g h) -> Global.State a b c d e (LocalState ai bi ci x ei fi) g h
     }
 
 
-lensWaiting : Lens (State g h) (Maybe String)
+lensWaiting : Lens (GlobalState g h) (Maybe String)
 lensWaiting =
     { getter = \(Global.State _ _ _ _ _ (LocalState _ _ _ _ x _) _ _) -> x
     , setter = \x (Global.State a b c d e (LocalState ai bi ci di _ fi) g h) -> Global.State a b c d e (LocalState ai bi ci di x fi) g h
     }
 
 
-lensInputTime : Lens (State g h) (Maybe Int)
+lensInputTime : Lens (GlobalState g h) (Maybe Int)
 lensInputTime =
     { getter = \(Global.State _ _ _ _ _ (LocalState _ _ _ _ _ x) _ _) -> x
     , setter = \x (Global.State a b c d e (LocalState ai bi ci di ei _) g h) -> Global.State a b c d e (LocalState ai bi ci di ei x) g h
@@ -121,7 +121,7 @@ lensInputTime =
 
 
 type alias IO g h v =
-    IO.IO (State g h) v
+    IO.IO (GlobalState g h) v
 
 
 

@@ -1,12 +1,12 @@
-module Extra.System.File.Remote exposing (getTree)
+module Extra.System.Dir.Local exposing (getTree)
 
 import Bytes exposing (Bytes)
-import Extra.System.File.Util as Util
-import Extra.System.IO as IO exposing (IO)
+import Extra.System.Dir.Util as Util
+import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either(..))
 
 
-getTree : Maybe String -> String -> IO.IO s (Util.Tree s)
+getTree : Maybe String -> String -> Util.IO b c d e f g h (Util.Tree b c d e f g h)
 getTree prefix remotePath =
     Util.requestString prefix remotePath <|
         \response ->
@@ -18,7 +18,7 @@ getTree prefix remotePath =
                     Util.getTreeError
 
 
-processBody : Maybe String -> String -> String -> IO s (Util.Tree s)
+processBody : Maybe String -> String -> String -> Util.IO b c d e f g h (Util.Tree b c d e f g h)
 processBody prefix remotePath body =
     Util.getTree (fileStep prefix) beforeDirStep afterDirStep remotePath body
 
@@ -27,7 +27,7 @@ type alias Acc =
     String
 
 
-fileStep : Maybe String -> Util.FileStep s Acc
+fileStep : Maybe String -> Util.FileStep b c d e f g h Acc
 fileStep prefix name _ dirPath =
     ( dirPath, getFile prefix (dirPath ++ "/" ++ name) )
 
@@ -42,7 +42,7 @@ afterDirStep _ beforeFilePath _ =
     beforeFilePath
 
 
-getFile : Maybe String -> String -> IO s (Maybe Bytes)
+getFile : Maybe String -> String -> Util.IO b c d e f g h (Maybe Bytes)
 getFile prefix filePath =
     Util.requestBytes prefix filePath <|
         \response ->

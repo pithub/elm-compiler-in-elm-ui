@@ -5,7 +5,7 @@ module Builder.Generate exposing
   , prod
   , repl
   --
-  , State
+  , GlobalState
   , LocalState
   , initialState
   --
@@ -29,7 +29,7 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
 import Compiler.Nitpick.Debug as Nitpick
-import Extra.System.File exposing (FilePath)
+import Extra.System.Dir exposing (FilePath)
 import Extra.System.MVar exposing (MVar)
 import Extra.Type.Either exposing (Either(..))
 import Extra.Type.Lens exposing (Lens)
@@ -51,12 +51,12 @@ import Global
 -- PUBLIC STATE
 
 
-type alias State f g h =
-  Build.State (LocalState f g h) f g h
+type alias GlobalState f g h =
+  Build.GlobalState (LocalState f g h) f g h
 
 type LocalState f g h = LocalState
-  {- mvLocalGraph -} (MVar.State (State f g h) (Maybe Opt.LocalGraph))
-  {- mvTypes -} (MVar.State (State f g h) (Maybe Extract.Types))
+  {- mvLocalGraph -} (MVar.State (GlobalState f g h) (Maybe Opt.LocalGraph))
+  {- mvTypes -} (MVar.State (GlobalState f g h) (Maybe Extract.Types))
 
 
 initialState : LocalState f g h
@@ -65,13 +65,13 @@ initialState = LocalState
   {- mvTypes -} (MVar.initialState "Types")
 
 
-lensMVLocalGraph : Lens (State f g h) (MVar.State (State f g h) (Maybe Opt.LocalGraph))
+lensMVLocalGraph : Lens (GlobalState f g h) (MVar.State (GlobalState f g h) (Maybe Opt.LocalGraph))
 lensMVLocalGraph =
   { getter = \(Global.State _ _ _ _ (LocalState x _ ) _ _ _) -> x
   , setter = \x (Global.State a b c d (LocalState _ bi) f g h) -> Global.State a b c d (LocalState x bi) f g h
   }
 
-lensMVTypes : Lens (State f g h) (MVar.State (State f g h) (Maybe Extract.Types))
+lensMVTypes : Lens (GlobalState f g h) (MVar.State (GlobalState f g h) (Maybe Extract.Types))
 lensMVTypes =
   { getter = \(Global.State _ _ _ _ (LocalState _ x) _ _ _) -> x
   , setter = \x (Global.State a b c d (LocalState ai _) f g h) -> Global.State a b c d (LocalState ai x) f g h
@@ -83,7 +83,7 @@ lensMVTypes =
 
 
 type alias IO f g h v =
-  IO.IO (State f g h) v
+  IO.IO (GlobalState f g h) v
 
 
 
@@ -91,7 +91,7 @@ type alias IO f g h v =
 
 
 type alias Task z f g h v =
-  Task.Task z (State f g h) Exit.Generate v
+  Task.Task z (GlobalState f g h) Exit.Generate v
 
 
 debug : FilePath -> Details.Details -> Build.Artifacts -> Task z f g h String

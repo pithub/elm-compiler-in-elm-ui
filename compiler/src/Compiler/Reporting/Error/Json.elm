@@ -13,7 +13,7 @@ import Compiler.Json.Decode as JD
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D exposing (d, da)
 import Compiler.Reporting.Render.Code as Code
-import Extra.System.File exposing (FilePath)
+import Extra.System.Dir exposing (FilePath)
 import Extra.Type.List as MList
 
 

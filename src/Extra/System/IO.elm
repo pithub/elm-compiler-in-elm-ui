@@ -8,6 +8,7 @@ module Extra.System.IO exposing
     , fmap
     , get
     , getLens
+    , init
     , join
     , liftA2
     , liftCmd
@@ -25,6 +26,7 @@ module Extra.System.IO exposing
     , rmap
     , sequence
     , sleep
+    , update
     , when
     )
 
@@ -87,6 +89,24 @@ log msg a s =
 noOp : IO s ()
 noOp =
     return ()
+
+
+init : (flags -> s) -> (flags -> IO s ()) -> flags -> ( s, Cmd (IO s ()) )
+init initialModel initialIO flags =
+    update (initialIO flags) (initialModel flags)
+
+
+update : IO s () -> s -> ( s, Cmd (IO s ()) )
+update msg model =
+    case msg model of
+        ( Pure (), newModel ) ->
+            ( newModel, Cmd.none )
+
+        ( ImpureCmd cmd, newModel ) ->
+            ( newModel, cmd )
+
+        ( ImpureCont cont, newModel ) ->
+            update (cont identity) newModel
 
 
 

@@ -1,14 +1,15 @@
-module Extra.System.File.Util exposing
+module Extra.System.Dir.Util exposing
     ( AfterDirStep
     , BeforeDirStep
     , Directory
     , Entry
     , FileStep
+    , IO
     , InternalDirectory
     , InternalEntry(..)
     , Tree
-    , getTreeError
     , getTree
+    , getTreeError
     , requestBytes
     , requestString
     , sliceBytes
@@ -16,6 +17,7 @@ module Extra.System.File.Util exposing
 
 import Bytes exposing (Bytes)
 import Bytes.Decode
+import Extra.System.Config as Config
 import Extra.System.Http as Http
 import Extra.System.IO as IO exposing (IO)
 import Extra.Type.Either exposing (Either)
@@ -25,23 +27,31 @@ import Time
 
 
 
+-- IO
+
+
+type alias IO b c d e f g h v =
+    IO.IO (Config.GlobalState b c d e f g h) v
+
+
+
 -- MOUNTED DIRECTORY TREE
 
 
-type alias Tree s =
-    ( Time.Posix, Directory s )
+type alias Tree b c d e f g h =
+    ( Time.Posix, Directory b c d e f g h )
 
 
-type alias Directory s =
-    InternalDirectory (IO s (Maybe Bytes))
+type alias Directory b c d e f g h =
+    InternalDirectory (IO b c d e f g h (Maybe Bytes))
 
 
 type alias InternalDirectory a =
     Map String ( Time.Posix, InternalEntry a )
 
 
-type alias Entry s =
-    InternalEntry (IO s (Maybe Bytes))
+type alias Entry b c d e f g h =
+    InternalEntry (IO b c d e f g h (Maybe Bytes))
 
 
 type InternalEntry a
@@ -53,8 +63,8 @@ type InternalEntry a
 -- BUILD DIRECTORY TREE
 
 
-type alias FileStep s v =
-    String -> Int -> v -> ( v, IO s (Maybe Bytes) )
+type alias FileStep b c d e f g h v =
+    String -> Int -> v -> ( v, IO b c d e f g h (Maybe Bytes) )
 
 
 type alias BeforeDirStep v =
@@ -65,7 +75,7 @@ type alias AfterDirStep v =
     String -> v -> v -> v
 
 
-getTree : FileStep s v -> BeforeDirStep v -> AfterDirStep v -> v -> String -> IO.IO s ( Time.Posix, Directory s )
+getTree : FileStep b c d e f g h v -> BeforeDirStep v -> AfterDirStep v -> v -> String -> IO b c d e f g h ( Time.Posix, Directory b c d e f g h )
 getTree fileStep beforeDirStep afterDirStep v tree =
     case Json.Decode.decodeString directoryDecoder tree of
         Ok ( time, directory ) ->
@@ -75,7 +85,7 @@ getTree fileStep beforeDirStep afterDirStep v tree =
             getTreeError
 
 
-getTreeError : IO s ( Time.Posix, InternalDirectory a )
+getTreeError : IO b c d e f g h ( Time.Posix, InternalDirectory a )
 getTreeError =
     IO.rmap IO.now (\time -> ( time, Map.empty ))
 
@@ -129,24 +139,24 @@ timeDecoder =
 -- PROCESS DIRECTORY TREE
 
 
-processUnreadFiles : FileStep s v -> BeforeDirStep v -> AfterDirStep v -> v -> TmpDirectory -> Directory s
+processUnreadFiles : FileStep b c d e f g h v -> BeforeDirStep v -> AfterDirStep v -> v -> TmpDirectory -> Directory b c d e f g h
 processUnreadFiles fileStep beforeDirStep afterDirStep v directory =
     Tuple.second (foldDirectory fileStep beforeDirStep afterDirStep v directory)
 
 
-foldDirectory : FileStep s v -> BeforeDirStep v -> AfterDirStep v -> v -> TmpDirectory -> ( v, Directory s )
+foldDirectory : FileStep b c d e f g h v -> BeforeDirStep v -> AfterDirStep v -> v -> TmpDirectory -> ( v, Directory b c d e f g h )
 foldDirectory fileStep beforeDirStep afterDirStep v directory =
     Map.foldlWithKey (directoryFolder fileStep beforeDirStep afterDirStep) ( v, Map.empty ) directory
 
 
-directoryFolder : FileStep s v -> BeforeDirStep v -> AfterDirStep v -> ( v, Directory s ) -> String -> ( Time.Posix, TmpEntry ) -> ( v, Directory s )
+directoryFolder : FileStep b c d e f g h v -> BeforeDirStep v -> AfterDirStep v -> ( v, Directory b c d e f g h ) -> String -> ( Time.Posix, TmpEntry ) -> ( v, Directory b c d e f g h )
 directoryFolder fileStep beforeDirStep afterDirStep ( v, directory ) name ( time, entry ) =
     case mapEntry fileStep beforeDirStep afterDirStep v name entry of
         ( newV, newEntry ) ->
             ( newV, Map.insert name ( time, newEntry ) directory )
 
 
-mapEntry : FileStep s v -> BeforeDirStep v -> AfterDirStep v -> v -> String -> TmpEntry -> ( v, Entry s )
+mapEntry : FileStep b c d e f g h v -> BeforeDirStep v -> AfterDirStep v -> v -> String -> TmpEntry -> ( v, Entry b c d e f g h )
 mapEntry fileStep beforeDirStep afterDirStep v name entry =
     case entry of
         UnreadFileEntry size () ->
@@ -156,14 +166,14 @@ mapEntry fileStep beforeDirStep afterDirStep v name entry =
             mapDirEntry fileStep beforeDirStep afterDirStep v name subDirectory
 
 
-mapFileEntry : FileStep s v -> v -> String -> Int -> ( v, Entry s )
+mapFileEntry : FileStep b c d e f g h v -> v -> String -> Int -> ( v, Entry b c d e f g h )
 mapFileEntry fileStep v name size =
     case fileStep name size v of
         ( newV, io ) ->
             ( newV, UnreadFileEntry size io )
 
 
-mapDirEntry : FileStep s v -> BeforeDirStep v -> AfterDirStep v -> v -> String -> TmpDirectory -> ( v, Entry s )
+mapDirEntry : FileStep b c d e f g h v -> BeforeDirStep v -> AfterDirStep v -> v -> String -> TmpDirectory -> ( v, Entry b c d e f g h )
 mapDirEntry fileStep beforeDirStep afterDirStep v name subDirectory =
     case foldDirectory fileStep beforeDirStep afterDirStep (beforeDirStep name v) subDirectory of
         ( newV, newSubDirectory ) ->
@@ -190,17 +200,17 @@ sliceDecoder offset length =
 -- HTTP REQUESTS
 
 
-requestString : Maybe String -> String -> (Either Http.Exception String -> IO s a) -> IO s a
+requestString : Maybe String -> String -> (Either Http.Exception String -> IO b c d e f g h v) -> IO b c d e f g h v
 requestString prefix remotePath callback =
     performRequest prefix remotePath (\manager request -> Http.withStringResponse request manager callback)
 
 
-requestBytes : Maybe String -> String -> (Either Http.Exception Bytes -> IO s a) -> IO s a
+requestBytes : Maybe String -> String -> (Either Http.Exception Bytes -> IO b c d e f g h v) -> IO b c d e f g h v
 requestBytes prefix remotePath callback =
     performRequest prefix remotePath (\manager request -> Http.withBytesResponse request manager callback)
 
 
-performRequest : Maybe String -> String -> (Http.Manager -> Http.Request -> IO s a) -> IO s a
+performRequest : Maybe String -> String -> (Http.Manager -> Http.Request -> IO b c d e f g h v) -> IO b c d e f g h v
 performRequest prefix remotePath callback =
     IO.bind (Http.newManager prefix) <|
         \manager ->

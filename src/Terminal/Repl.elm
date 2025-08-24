@@ -66,7 +66,7 @@ import Compiler.Reporting.Error.Import as EI
 import Compiler.Reporting.Error.Syntax as ES
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
-import Extra.System.File as SysFile exposing (FilePath)
+import Extra.System.Dir as Dir exposing (FilePath)
 import Extra.System.IO as IO
 import Extra.Type.Either as Either exposing (Either(..))
 import Extra.Type.Lens exposing (Lens)
@@ -84,7 +84,7 @@ import Unicode as UChar
 
 
 type alias GlobalState h =
-  Command.State (LocalState h) h
+  Command.GlobalState (LocalState h) h
 
 
 type LocalState h =
@@ -767,8 +767,8 @@ getRoot =
 
     Nothing ->
       IO.bind Stuff.getReplCache <| \cache ->
-      let root = SysFile.addName cache "tmp" in
-      IO.bind (SysFile.createDirectoryIfMissing True (SysFile.addName root "src")) <| \_ ->
+      let root = Dir.addName cache "tmp" in
+      IO.bind (Dir.createDirectoryIfMissing True (Dir.addName root "src")) <| \_ ->
       IO.bind (Outline.write root <| Outline.Pkg <|
         Outline.PkgOutline
           Pkg.dummyName

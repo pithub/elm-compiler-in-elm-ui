@@ -67,6 +67,13 @@ a:hover {
   font-family: 'Source Code Pro';
 }
 
+iframe {
+  width: 100%;
+  height: calc(100vh - 248px);
+  max-height: calc(100vh - 248px);
+  border: none;
+}
+
 
 /* COMMAND */
 

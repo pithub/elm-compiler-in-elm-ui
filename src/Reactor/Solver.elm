@@ -10,14 +10,14 @@ import Builder.Stuff as Stuff
 import Compiler.Elm.Constraint as Con
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Extra.System.File exposing (FilePath)
+import Extra.System.Dir exposing (FilePath)
 import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either)
 import Extra.Type.Map as Map
 
 
 type alias IO d e f g h v =
-    IO.IO (Details.State d e f g h) v
+    IO.IO (Details.GlobalState d e f g h) v
 
 
 validate : FilePath -> IO d e f g h (Either Exit.Details Details.ValidOutline)
@@ -69,7 +69,7 @@ initEnv root =
 
 
 type alias Task z d e f g h v =
-    Task.Task z (Details.State d e f g h) Exit.Details v
+    Task.Task z (Details.GlobalState d e f g h) Exit.Details v
 
 
 verifyPkg : Env -> Outline.PkgOutline -> Task z d e f g h Details.ValidOutline

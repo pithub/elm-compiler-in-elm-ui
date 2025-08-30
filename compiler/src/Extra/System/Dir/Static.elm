@@ -1,13 +1,13 @@
-module Extra.System.File.Static exposing (getTree)
+module Extra.System.Dir.Static exposing (getTree)
 
 import Bytes exposing (Bytes)
 import Bytes.Decode
-import Extra.System.File.Util as Util
-import Extra.System.IO as IO exposing (IO)
+import Extra.System.Dir.Util as Util
+import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either(..))
 
 
-getTree : Maybe String -> String -> IO s (Util.Tree s)
+getTree : Maybe String -> String -> Util.IO b c d e f g h (Util.Tree b c d e f g h)
 getTree prefix remotePath =
     Util.requestBytes prefix remotePath <|
         \response ->
@@ -19,7 +19,7 @@ getTree prefix remotePath =
                     Util.getTreeError
 
 
-processBodyBytes : Bytes -> IO s (Util.Tree s)
+processBodyBytes : Bytes -> Util.IO b c d e f g h (Util.Tree b c d e f g h)
 processBodyBytes body =
     case Bytes.Decode.decode treeBytesDecoder body of
         Just ( contentOffset, tree ) ->
@@ -44,7 +44,7 @@ type alias Acc =
     ( Int, Bytes )
 
 
-fileStep : Util.FileStep s Acc
+fileStep : Util.FileStep b c d e f g h Acc
 fileStep _ size ( offset, bytes ) =
     ( ( offset + size, bytes ), IO.return (Util.sliceBytes offset size bytes) )
 

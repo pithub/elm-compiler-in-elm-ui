@@ -48,7 +48,7 @@ import BigInt exposing (BigInt)
 import Bytes.Encode
 import Extra.Data.Binary.Get as Get exposing (Get)
 import Extra.Data.Binary.Put as Put exposing (Put)
-import Extra.System.File as SysFile exposing (FilePath)
+import Extra.System.Dir as Dir exposing (FilePath)
 import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either(..))
 import Extra.Type.List as MList exposing (TList)
@@ -60,8 +60,8 @@ import Extra.Type.Set as Set
 -- PRIVATE IO
 
 
-type alias IO b c d e f g h v =
-    IO.IO (SysFile.State b c d e f g h) v
+type alias IO c d e f g h v =
+    IO.IO (Dir.GlobalState c d e f g h) v
 
 
 
@@ -78,14 +78,14 @@ type alias ByteOffset =
     Get.ByteOffset
 
 
-encodeFile : Binary v -> FilePath -> v -> IO b c d e f g h ()
+encodeFile : Binary v -> FilePath -> v -> IO c d e f g h ()
 encodeFile binV path v =
-    SysFile.writeFile path (Put.runPut (binV.put v))
+    Dir.writeFile path (Put.runPut (binV.put v))
 
 
-decodeFileOrFail : Binary v -> FilePath -> IO b c d e f g h (Either ( ByteOffset, String ) v)
+decodeFileOrFail : Binary v -> FilePath -> IO c d e f g h (Either ( ByteOffset, String ) v)
 decodeFileOrFail binV path =
-    SysFile.readFile path
+    Dir.readFile path
         |> IO.fmap
             (\maybeBytes ->
                 case maybeBytes of
@@ -93,7 +93,7 @@ decodeFileOrFail binV path =
                         Get.runGetOrFail binV.get bytes
 
                     Nothing ->
-                        Left ( 0, "File not found: " ++ SysFile.toString path )
+                        Left ( 0, "File not found: " ++ Dir.toString path )
             )
 
 
@@ -485,9 +485,9 @@ bMaybe binA =
         |> finish
 
 
-bPath : Binary SysFile.FilePath
+bPath : Binary Dir.FilePath
 bPath =
-    bin1 SysFile.fromString SysFile.toString bString
+    bin1 Dir.fromString Dir.toString bString
 
 
 bSequence : Binary a -> Int -> Binary (List a)

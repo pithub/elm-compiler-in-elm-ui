@@ -423,7 +423,7 @@ problemToHint problem =
     T.AnythingFromMaybe ->
       [ D.toFancyHint
           [d"Use",D.greenS "Maybe.withDefault",d"to",d"handle",d"possible",d"errors."
-          ,d"Longer",d"term,d",d"it",d"is",d"usually",d"better",d"to",d"write",d"out",d"the"
+          ,d"Longer",d"term,",d"it",d"is",d"usually",d"better",d"to",d"write",d"out",d"the"
           ,d"full",d"`case`",d"though!"
           ]
       ]
@@ -1266,7 +1266,7 @@ badAppendLeft localizer category tipe expected =
     ANumber thing stringFromThing ->
       ( D.fillSep
           [d"The",d"(++)",d"operator",d"can",d"append",d"List",d"and",d"String"
-          ,d"values,d",d"but",d"not",D.dullyellow thing,d"values",d"like",d"this:"
+          ,d"values,",d"but",d"not",D.dullyellow thing,d"values",d"like",d"this:"
           ]
       , D.fillSep
           [d"Try",d"using",D.green stringFromThing,d"to",d"turn",d"it",d"into",d"a",d"string?"
@@ -1295,7 +1295,7 @@ badAppendRight localizer category tipe expected =
     (AString, ANumber thing stringFromThing) ->
       EmphRight
         ( D.fillSep
-            [d"I",d"thought",d"I",d"was",d"appending",D.dullyellowS "String",d"values",d"here,d"
+            [d"I",d"thought",d"I",d"was",d"appending",D.dullyellowS "String",d"values",d"here,"
             ,d"not",D.dullyellow thing,d"values",d"like",d"this:"
             ]
         , D.fillSep
@@ -1556,7 +1556,7 @@ badCompLeft localizer category op direction tipe expected =
           ,d"and"
           ,D.dullyellowS "String"
           ,d"values.",d"It",d"can",d"work",d"on",d"lists",d"and",d"tuples"
-          ,d"of",d"comparable",d"values",d"as",d"well,d",d"but",d"it",d"is"
+          ,d"of",d"comparable",d"values",d"as",d"well,",d"but",d"it",d"is"
           ,d"usually",d"better",d"to",d"find",d"a",d"different",d"path."
           ]
       ]

@@ -13,7 +13,7 @@ import Compiler.Json.Decode as JD
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D exposing (d, da)
 import Compiler.Reporting.Render.Code as Code
-import Extra.System.File exposing (FilePath)
+import Extra.System.Dir exposing (FilePath)
 import Extra.Type.List as MList
 
 
@@ -84,7 +84,7 @@ parseErrorToReport path source parseError reason =
         ,
           D.stack
             [ D.fillSep
-                [d"I",d"saw",d"a",d"comma",d"right",d"before",d"I",d"got",d"stuck",d"here,d"
+                [d"I",d"saw",d"a",d"comma",d"right",d"before",d"I",d"got",d"stuck",d"here,"
                 ,d"so",d"I",d"was",d"expecting",d"to",d"see",d"a",d"field",d"name",d"like"
                 ,D.dullyellowS "\"type\"",d"or",D.dullyellowS "\"dependencies\"",d"next."
                 ]

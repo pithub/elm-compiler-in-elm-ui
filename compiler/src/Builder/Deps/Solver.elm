@@ -26,7 +26,7 @@ import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
-import Extra.System.File as SysFile
+import Extra.System.Dir as Dir
 import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either(..))
 import Extra.Type.List as MList exposing (TList)
@@ -39,7 +39,7 @@ import Extra.Class.Monad as Monad
 
 
 type alias IO c d e f g h v =
-  IO.IO (Http.State c d e f g h) v
+  IO.IO (Dir.GlobalState c d e f g h) v
 
 
 
@@ -288,7 +288,7 @@ getConstraints pkg vsn =
       Nothing ->
         let toNewState cs = State cache connection registry (Map.insert key cs cDict) in
         let home = Stuff.package cache pkg vsn in
-        let path = SysFile.addName home "elm.json"in
+        let path = Dir.addName home "elm.json"in
         IO.bind (File.exists path) <| \outlineExists ->
         if outlineExists
           then
@@ -300,7 +300,7 @@ getConstraints pkg vsn =
                     ok (toNewState cs) cs back
 
                   Offline ->
-                    IO.bind (SysFile.doesDirectoryExist (SysFile.addName (Stuff.package cache pkg vsn) "src")) <| \srcExists ->
+                    IO.bind (Dir.doesDirectoryExist (Dir.addName (Stuff.package cache pkg vsn) "src")) <| \srcExists ->
                     if srcExists
                       then ok (toNewState cs) cs back
                       else back state
@@ -323,7 +323,7 @@ getConstraints pkg vsn =
                   Right body ->
                     case D.fromByteString constraintsDecoder body of
                       Right cs ->
-                        IO.bind (SysFile.createDirectoryIfMissing True home) <| \_ ->
+                        IO.bind (Dir.createDirectoryIfMissing True home) <| \_ ->
                         IO.bind (File.writeUtf8 path body) <| \_ ->
                         ok (toNewState cs) cs back
 

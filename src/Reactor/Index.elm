@@ -26,7 +26,8 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Elm.Error as Error
 import Extra.Class.Applicative as Applicative
-import Extra.System.File as SysFile exposing (FileName, FilePath)
+import Extra.System.Config as Config
+import Extra.System.Dir as Dir exposing (FileName, FilePath)
 import Extra.System.IO as IO
 import Extra.Type.Either as Either exposing (Either(..))
 import Extra.Type.Lens exposing (Lens)
@@ -85,12 +86,14 @@ type FileContents
     = TextContents Bool String
     | HexContents String String String
     | ElmContents String
+    | HtmlContents String
 
 
 type ShowMode
     = AsText
     | AsHex
     | AsElm
+    | AsHtml
 
 
 initialState : LocalState
@@ -136,8 +139,8 @@ type alias IO v =
 initialIO : IO Bool -> IO ()
 initialIO htmlEnabled =
     IO.sequence
-        [ Http.setPrefix (Just "/proxy/")
-        , SysFile.setMountPrefix (Just "/query/")
+        [ Config.setHttpPrefix (Just "/proxy/")
+        , Config.setMountPrefix (Just "/query/")
         , setHtmlEnabled htmlEnabled
         , getTimeZone
         , commandLoop
@@ -195,11 +198,14 @@ executeCommand command =
           else if command == "" || command == "h" then
             showHelp
 
-          else if String.startsWith "mr " command then
-            mountRemote (String.dropLeft 3 command |> String.split " ")
+          else if String.startsWith "ml " command then
+            mountLocal (String.dropLeft 3 command |> String.split " ")
 
           else if String.startsWith "ms " command then
             mountStatic (String.dropLeft 3 command |> String.split " ")
+
+          else if String.startsWith "mz " command then
+            mountZip (String.dropLeft 3 command |> String.split " ")
 
           else if String.startsWith "r " command then
             removeEntry (String.dropLeft 2 command)
@@ -228,12 +234,18 @@ executeCommand command =
           else if String.startsWith "ei " command then
             elmInstall (String.dropLeft 3 command)
 
+          else if command == "em" then
+            elmMakePkg
+
           else if String.startsWith "em " command then
-            if String.dropLeft 4 command |> String.startsWith " " then
-                elmMake (String.dropLeft 3 command |> String.left 1) (String.dropLeft 5 command)
+            if String.dropLeft 4 command |> String.startsWith "h " then
+                elmMakeApp (String.dropLeft 3 command |> String.left 2) (String.dropLeft 6 command)
+
+            else if String.dropLeft 4 command |> String.startsWith " " then
+                elmMakeApp (String.dropLeft 3 command |> String.left 1) (String.dropLeft 5 command)
 
             else
-                elmMake "v" (String.dropLeft 3 command)
+                elmMakeApp "v" (String.dropLeft 3 command)
 
           else if command == "er" then
             IO.bind isHtmlEnabled <|
@@ -305,8 +317,9 @@ File System
 <file> - create <file>
 d <path> - create directory <path>
 r <path> - remove <path>
-mr <mount> <target> - mount <mount> to <target>
-ms <mount> <target> - mount statically prepared <mount> to <target>
+ml <dir> <target> - mount local <dir> to <target>
+ms <file> <target> - mount statically prepared dir <file> to <target>
+mz <url> <target> - mount zipball at <url> to <target>
 
 
 Other
@@ -361,12 +374,12 @@ idRecord =
 
 createDirectory : String -> IO ()
 createDirectory string =
-    IO.bind (toPath string) (SysFile.createDirectoryIfMissing True)
+    IO.bind (toPath string) (Dir.createDirectoryIfMissing True)
 
 
 createFile : String -> IO ()
 createFile string =
-    IO.bind (toPath string) (\filePath -> SysFile.writeFile filePath emptyBytes)
+    IO.bind (toPath string) (\filePath -> Dir.writeFile filePath emptyBytes)
 
 
 emptyBytes : Bytes
@@ -376,16 +389,16 @@ emptyBytes =
 
 getExtension : FilePath -> String
 getExtension filePath =
-    case SysFile.splitLastName filePath of
+    case Dir.splitLastName filePath of
         ( _, name ) ->
-            Tuple.second (SysFile.splitExtension name)
+            Tuple.second (Dir.splitExtension name)
 
 
-mountRemote : TList String -> IO ()
-mountRemote strings =
+mountLocal : TList String -> IO ()
+mountLocal strings =
     case strings of
         [ mountPoint, target ] ->
-            IO.bind (toPath target) (SysFile.mountRemote mountPoint)
+            IO.bind (toPath target) (Dir.mountLocal mountPoint)
 
         _ ->
             IO.noOp
@@ -395,7 +408,17 @@ mountStatic : TList String -> IO ()
 mountStatic strings =
     case strings of
         [ mountPoint, target ] ->
-            IO.bind (toPath target) (SysFile.mountStatic mountPoint)
+            IO.bind (toPath target) (Dir.mountStatic mountPoint)
+
+        _ ->
+            IO.noOp
+
+
+mountZip : TList String -> IO ()
+mountZip strings =
+    case strings of
+        [ url, target ] ->
+            IO.bind (toPath target) (Dir.mountZip url)
 
         _ ->
             IO.noOp
@@ -406,8 +429,8 @@ removeEntry string =
     IO.bind (toPath string) <|
         \path ->
             IO.sequence
-                [ SysFile.removeFile path
-                , SysFile.removeDirectory path
+                [ Dir.removeFile path
+                , Dir.removeDirectory path
                 ]
 
 
@@ -425,7 +448,7 @@ saveFile =
 
 toPath : String -> IO FilePath
 toPath string =
-    SysFile.makeAbsolute (SysFile.fromString string)
+    Dir.makeAbsolute (Dir.fromString string)
 
 
 
@@ -437,7 +460,7 @@ pushDirectory fileName =
     ifReplNotShown <|
         IO.sequence
             [ clearDisplay
-            , SysFile.setCurrentDirectory (SysFile.fromString fileName)
+            , Dir.setCurrentDirectory (Dir.fromString fileName)
             ]
 
 
@@ -446,24 +469,24 @@ changeCwd cwd =
     ifReplNotShown <|
         IO.sequence
             [ clearDisplay
-            , IO.bind SysFile.getCurrentDirectory <|
+            , IO.bind Dir.getCurrentDirectory <|
                 \current ->
-                    if SysFile.toString current == "/" && cwd == [] then
-                        SysFile.resetFileSystem
+                    if Dir.toString current == "/" && cwd == [] then
+                        Dir.resetFileSystem
 
                     else
-                        SysFile.setCurrentDirectory (cwdToPath cwd)
+                        Dir.setCurrentDirectory (cwdToPath cwd)
             ]
 
 
 cwdToPath : TList FileName -> FilePath
 cwdToPath cwd =
-    SysFile.addNames rootPath (MList.reverse cwd)
+    Dir.addNames rootPath (MList.reverse cwd)
 
 
 rootPath : FilePath
 rootPath =
-    SysFile.fromString "/"
+    Dir.fromString "/"
 
 
 
@@ -612,13 +635,16 @@ getFileContents filePath mode =
             File.readUtf8 filePath |> IO.fmap (TextContents False >> Right)
 
         AsHex ->
-            SysFile.readFile filePath
+            Dir.readFile filePath
                 |> IO.fmap (Maybe.map bytesToHex)
                 |> IO.fmap (Maybe.withDefault errorHex >> Right)
 
         AsElm ->
             getExecutableJavaScript filePath
                 |> IO.fmap (Either.fmap ElmContents)
+
+        AsHtml ->
+            File.readUtf8 filePath |> IO.fmap (HtmlContents >> Right)
 
 
 setFileContents : String -> IO ()
@@ -647,6 +673,9 @@ specialModeFor filePath =
     if isExecutable filePath then
         AsElm
 
+    else if isHtml filePath then
+        AsHtml
+
     else
         AsHex
 
@@ -658,7 +687,7 @@ isEditable filePath =
 
 extensionsOfEditableFile : Set.Set String
 extensionsOfEditableFile =
-    Set.fromList [ "elm", "js", "json", "md", "txt" ]
+    Set.fromList [ "elm", "html", "js", "json", "md", "txt" ]
 
 
 isExecutable : FilePath -> Bool
@@ -669,6 +698,16 @@ isExecutable filePath =
 extensionsOfExecutableFile : Set.Set String
 extensionsOfExecutableFile =
     Set.fromList [ "elm", "js" ]
+
+
+isHtml : FilePath -> Bool
+isHtml filePath =
+    Set.member (getExtension filePath) extensionsOfHtmlFile
+
+
+extensionsOfHtmlFile : Set.Set String
+extensionsOfHtmlFile =
+    Set.fromList [ "html" ]
 
 
 showError : Report -> IO ()
@@ -708,7 +747,7 @@ this.Elm.""" ++ toModuleMame filePath ++ """.init({
 toModuleMame : FilePath -> String
 toModuleMame filePath =
     filePath
-        |> SysFile.toString
+        |> Dir.toString
         |> trimUntil "src/"
         |> String.replace ".elm" ""
         |> trimUntil "build/"
@@ -995,13 +1034,34 @@ elmInstall packageName =
                                             showError <| Exit.installToReport error
 
 
-elmMake : String -> String -> IO ()
-elmMake mode string =
+elmMakePkg : IO ()
+elmMakePkg =
+    let
+        flags : Terminal.Make.Flags
+        flags =
+            Terminal.Make.Flags
+                {- debug -} False
+                {- optimize -} False
+                {- async -} False
+                {- output -} Nothing
+    in
+    IO.bind (Terminal.Make.run [] flags) <|
+        \result ->
+            case result of
+                Right () ->
+                    showCommandDuration "elm make"
+
+                Left error ->
+                    showError <| Exit.makeToReport error
+
+
+elmMakeApp : String -> String -> IO ()
+elmMakeApp mode string =
     IO.bind (toPath string) <|
         \inputPath ->
             let
                 ( debugFlag, optimizeFlag, asyncFlag ) =
-                    case mode of
+                    case String.left 1 mode of
                         "d" ->
                             ( True, False, False )
 
@@ -1014,23 +1074,36 @@ elmMake mode string =
                         _ ->
                             ( False, False, False )
 
+                ( targetSuffix, outputTag ) =
+                    if String.endsWith "h" mode then
+                        ( ".html", Terminal.Make.Html )
+
+                    else
+                        ( ".js", Terminal.Make.JS )
+
                 outputPath : FilePath
                 outputPath =
-                    SysFile.toString inputPath
+                    Dir.toString inputPath
                         |> String.replace "src/" "build/"
-                        |> String.replace ".elm" ".js"
-                        |> SysFile.fromString
-            in
-            withRoot <|
-                \root ->
-                    IO.bind (Terminal.Make.run root [ inputPath ] debugFlag optimizeFlag asyncFlag outputPath) <|
-                        \result ->
-                            case result of
-                                Right () ->
-                                    IO.noOp
+                        |> String.replace ".elm" targetSuffix
+                        |> Dir.fromString
 
-                                Left error ->
-                                    showError <| Exit.makeToReport error
+                flags : Terminal.Make.Flags
+                flags =
+                    Terminal.Make.Flags
+                        {- debug -} debugFlag
+                        {- optimize -} optimizeFlag
+                        {- async -} asyncFlag
+                        {- output -} (Just (outputTag outputPath))
+            in
+            IO.bind (Terminal.Make.run [ inputPath ] flags) <|
+                \result ->
+                    case result of
+                        Right () ->
+                            showCommandDuration "elm make"
+
+                        Left error ->
+                            showError <| Exit.makeToReport error
 
 
 elmReactor : FilePath -> IO (Either Exit.Reactor String)
@@ -1206,17 +1279,17 @@ createBreakpointPackage pkg =
                     Stuff.package cache pkg V.one
 
                 srcPath =
-                    SysFile.addName packagePath "src"
+                    Dir.addName packagePath "src"
 
                 kernelPath =
-                    SysFile.addNames srcPath [ "Elm", "Kernel" ]
+                    Dir.addNames srcPath [ "Elm", "Kernel" ]
             in
             IO.sequence
-                [ SysFile.createDirectoryIfMissing True kernelPath
-                , File.writeUtf8 (SysFile.addName packagePath "elm.json") breakpointOutline
-                , File.writeUtf8 (SysFile.addName srcPath "Breakpoint.elm") breakpointModule
+                [ Dir.createDirectoryIfMissing True kernelPath
+                , File.writeUtf8 (Dir.addName packagePath "elm.json") breakpointOutline
+                , File.writeUtf8 (Dir.addName srcPath "Breakpoint.elm") breakpointModule
                 , File.writeUtf8
-                    (SysFile.addName kernelPath "Breakpoint.js")
+                    (Dir.addName kernelPath "Breakpoint.js")
                     (breakpointKernel idRecord.breakpointSuspendedEvent)
                 ]
 
@@ -1886,12 +1959,12 @@ type alias File =
 
 getRevCwd : State -> TList FileName
 getRevCwd =
-    SysFile.getCurrentDirectoryNamesPure
+    Dir.getCurrentDirectoryNamesPure
 
 
 getDirsAndFiles : Time.Zone -> State -> ( TList File, TList File )
 getDirsAndFiles zone state =
-    SysFile.getCurrentDirectoryEntriesPure state <|
+    Dir.getCurrentDirectoryEntriesPure state <|
         \name size time ->
             { name = name
             , size = size
@@ -2137,7 +2210,7 @@ viewFileContents : IdRecord -> FilePath -> FileContents -> Bool -> Html (IO ())
 viewFileContents ids filePath contents editable =
     let
         ( _, fileName ) =
-            SysFile.splitLastName filePath
+            Dir.splitLastName filePath
 
         titleClick =
             if editable then
@@ -2190,6 +2263,14 @@ viewFileContents ids filePath contents editable =
                             [ Html.div [ Html.Attributes.id ids.elmResultId ] [] ]
                       ]
                     ]
+                , footerClick = Nothing
+                }
+
+        HtmlContents code ->
+            Skeleton.box
+                { title = fileName
+                , titleClick = titleClick
+                , items = [ [ Html.iframe [ Html.Attributes.srcdoc code ] [] ] ]
                 , footerClick = Nothing
                 }
 

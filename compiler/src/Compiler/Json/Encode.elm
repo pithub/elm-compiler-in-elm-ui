@@ -23,7 +23,7 @@ module Compiler.Json.Encode exposing
 import Builder.File as File
 import Compiler.Data.Name as Name
 import Compiler.Json.String as Json
-import Extra.System.File as SysFile exposing (FilePath)
+import Extra.System.Dir as Dir exposing (FilePath)
 import Extra.System.IO as IO
 import Extra.Type.List as MList exposing (TList)
 import Extra.Type.Map as Map
@@ -32,8 +32,8 @@ import Extra.Type.Map as Map
 -- PRIVATE IO
 
 
-type alias IO b c d e f g h v =
-  IO.IO (SysFile.State b c d e f g h) v
+type alias IO c d e f g h v =
+  IO.IO (Dir.GlobalState c d e f g h) v
 
 
 
@@ -99,7 +99,7 @@ escape chrs =
 -- WRITE TO FILE
 
 
-write : FilePath -> Value -> IO b c d e f g h ()
+write : FilePath -> Value -> IO c d e f g h ()
 write path value =
   File.writeBuilder path (encode value ++ "\n")
 

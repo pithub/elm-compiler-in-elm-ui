@@ -31,5 +31,5 @@ app.use('/query/', (req, res) => {
 app.use(express.static('../dist'))
 
 app.listen(8088, () => {
-    console.info('proxy server is running on port 8088')
+    console.info('Go to http://localhost:8088 to see the app.')
 })

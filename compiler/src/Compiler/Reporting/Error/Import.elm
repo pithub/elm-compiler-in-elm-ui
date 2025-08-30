@@ -13,7 +13,7 @@ import Compiler.Reporting.Doc as D exposing (d, da)
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Compiler.Reporting.Suggest as Suggest
-import Extra.System.File exposing (FilePath)
+import Extra.System.Dir exposing (FilePath)
 import Extra.Type.List as MList exposing (TList)
 import Extra.Type.Map as Map
 import Extra.Type.Set as Set
@@ -91,7 +91,7 @@ toReport source (Error region name unimportedModules problem) =
                 D.fillSep <|
                   [d"But",d"I",d"found",d"multiple",d"modules",d"with",d"that",d"name.",d"One",d"in",d"the"
                   ,D.dullyellow (D.fromChars (Pkg.toChars pkg))
-                  ,d"package,d",d"and",d"another",d"defined",d"locally",d"in",d"the"
+                  ,d"package,",d"and",d"another",d"defined",d"locally",d"in",d"the"
                   ,D.dullyellow (D.fromPath path)
                   ,d"file.",d"I",d"do",d"not",d"have",d"a",d"way",d"to",d"choose",d"between",d"them."
                   ]

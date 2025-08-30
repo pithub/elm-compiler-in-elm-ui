@@ -12,7 +12,7 @@ import Compiler.Elm.Constraint as Con
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D exposing (d)
-import Extra.System.File as SysFile
+import Extra.System.Dir as Dir
 import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either(..))
 import Extra.Type.List as MList
@@ -25,7 +25,7 @@ import Terminal.Command as Command
 
 
 type alias IO g h v =
-  IO.IO (Command.State g h) v
+  IO.IO (Command.GlobalState g h) v
 
 
 
@@ -34,7 +34,7 @@ type alias IO g h v =
 
 run : IO g h (Either Exit.Init ())
 run =
-  IO.bind (SysFile.doesFileExist (SysFile.fromString "elm.json")) <| \exists ->
+  IO.bind (Dir.doesFileExist (Dir.fromString "elm.json")) <| \exists ->
   if exists
     then IO.return (Left Exit.InitAlreadyExists)
     else
@@ -95,9 +95,9 @@ init =
             directs = Map.intersection solution defaults
             indirects = Map.difference solution defaults
           in
-          IO.bind (SysFile.createDirectoryIfMissing True (SysFile.fromString "src")) <| \_ ->
-          IO.bind (Outline.write (SysFile.fromString "") <| Outline.App <|
-            Outline.AppOutline V.compiler (NE.CList (Outline.RelativeSrcDir (SysFile.fromString "src")) []) directs indirects Map.empty Map.empty) <| \_ ->
+          IO.bind (Dir.createDirectoryIfMissing True (Dir.fromString "src")) <| \_ ->
+          IO.bind (Outline.write (Dir.fromString "") <| Outline.App <|
+            Outline.AppOutline V.compiler (NE.CList (Outline.RelativeSrcDir (Dir.fromString "src")) []) directs indirects Map.empty Map.empty) <| \_ ->
           IO.bind (Command.putLine "Okay, I created it. Now read that link!") <| \_ ->
           IO.return (Right ())
 

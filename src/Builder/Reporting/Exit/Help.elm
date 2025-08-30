@@ -16,7 +16,7 @@ module Builder.Reporting.Exit.Help exposing
 import Compiler.Reporting.Doc as D exposing (d)
 import Compiler.Reporting.Error as Error
 import Elm.Error as Client
-import Extra.System.File as SysFile exposing (FilePath)
+import Extra.System.Dir as Dir exposing (FilePath)
 import Extra.Type.List as MList exposing (TList)
 
 
@@ -73,7 +73,7 @@ reportToDoc report_ =
               makeDashes (4 + String.length title)
 
             Just path ->
-              makeDashes (5 + String.length title + String.length (SysFile.toString path)) ++ " " ++ (SysFile.toString path)
+              makeDashes (5 + String.length title + String.length (Dir.toString path)) ++ " " ++ (Dir.toString path)
 
         errorBar =
           D.dullcyan <|
@@ -94,7 +94,7 @@ reportToClient report_ =
 
     Report title maybePath message ->
       Client.GeneralProblem
-        { path = Maybe.map SysFile.toString maybePath
+        { path = Maybe.map Dir.toString maybePath
         , title = title
         , message = D.toClient message
         }

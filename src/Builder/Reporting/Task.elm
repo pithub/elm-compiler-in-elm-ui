@@ -6,7 +6,7 @@ module Builder.Reporting.Task exposing
   , mapError
   --
   , io
-  --, mio
+  , mio
   , eio
   )
 
@@ -49,6 +49,15 @@ mapError func (Task task) =
 io : IO s a -> Task z s x a
 io work =
   Task <| \ok _ -> IO.bind work ok
+
+
+mio : x -> IO s (Maybe a) -> Task z s x a
+mio x work =
+  Task <| \ok err ->
+    IO.bind work <| \result ->
+    case result of
+      Just a -> ok a
+      Nothing -> err x
 
 
 eio : (x -> y) -> IO s (Either x a) -> Task z s y a

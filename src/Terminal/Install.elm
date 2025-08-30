@@ -14,7 +14,7 @@ import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D exposing (d)
-import Extra.System.File exposing (FilePath)
+import Extra.System.Dir exposing (FilePath)
 import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either(..))
 import Extra.Type.List as MList exposing (TList)
@@ -27,7 +27,7 @@ import Terminal.Command as Command
 
 
 type alias IO g h v =
-  IO.IO (Command.State g h) v
+  IO.IO (Command.GlobalState g h) v
 
 
 
@@ -60,7 +60,7 @@ type Changes vsn
 
 
 type alias Task z g h v =
-  Task.Task z (Command.State g h) Exit.Install v
+  Task.Task z (Command.GlobalState g h) Exit.Install v
 
 
 attemptChanges : FilePath -> Solver.Env -> Outline.Outline -> (v -> String) -> Changes v -> Task z g h ()

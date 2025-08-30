@@ -28,7 +28,7 @@ import Compiler.Json.Encode as E
 import Compiler.Json.String as Json
 import Compiler.Parse.Primitives as P
 import Extra.Data.Binary as B
-import Extra.System.File as SysFile exposing (FilePath)
+import Extra.System.Dir as Dir exposing (FilePath)
 import Extra.System.IO as IO
 import Extra.Type.Either exposing (Either(..))
 import Extra.Type.List as MList exposing (TList)
@@ -39,8 +39,8 @@ import Extra.Type.Map as Map
 -- PRIVATE IO
 
 
-type alias IO b c d e f g h v =
-  IO.IO (SysFile.State b c d e f g h) v
+type alias IO c d e f g h v =
+  IO.IO (Dir.GlobalState c d e f g h) v
 
 
 
@@ -111,9 +111,9 @@ flattenExposed exposed =
 -- WRITE
 
 
-write : FilePath -> Outline -> IO b c d e f g h ()
+write : FilePath -> Outline -> IO c d e f g h ()
 write root outline =
-  E.write (SysFile.addName root "elm.json") (encode outline)
+  E.write (Dir.addName root "elm.json") (encode outline)
 
 
 
@@ -177,17 +177,17 @@ encodeDeps encodeValue deps =
 encodeSrcDir : SrcDir -> E.Value
 encodeSrcDir srcDir =
   case srcDir of
-    AbsoluteSrcDir dir -> E.chars (SysFile.toString dir)
-    RelativeSrcDir dir -> E.chars (SysFile.toString dir)
+    AbsoluteSrcDir dir -> E.chars (Dir.toString dir)
+    RelativeSrcDir dir -> E.chars (Dir.toString dir)
 
 
 
 -- PARSE AND VERIFY
 
 
-read : FilePath -> IO b c d e f g h (Either Exit.Outline Outline)
+read : FilePath -> IO c d e f g h (Either Exit.Outline Outline)
 read root =
-  IO.bind (File.readUtf8 (SysFile.addName root "elm.json")) <| \bytes ->
+  IO.bind (File.readUtf8 (Dir.addName root "elm.json")) <| \bytes ->
   case D.fromByteString decoder bytes of
     Left err ->
       IO.return <| Left (Exit.OutlineHasBadStructure err)
@@ -223,9 +223,9 @@ read root =
                     IO.return <| Left (Exit.OutlineHasDuplicateSrcDirs canonicalDir dir1 dir2)
 
 
-isSrcDirMissing : FilePath -> SrcDir -> IO b c d e f g h Bool
+isSrcDirMissing : FilePath -> SrcDir -> IO c d e f g h Bool
 isSrcDirMissing root srcDir =
-  IO.fmap not <| SysFile.doesDirectoryExist (toAbsolute root srcDir)
+  IO.fmap not <| Dir.doesDirectoryExist (toAbsolute root srcDir)
 
 
 toGiven : SrcDir -> FilePath
@@ -239,19 +239,19 @@ toAbsolute : FilePath -> SrcDir -> FilePath
 toAbsolute root srcDir =
   case srcDir of
     AbsoluteSrcDir dir -> dir
-    RelativeSrcDir dir -> SysFile.combine root dir
+    RelativeSrcDir dir -> Dir.combine root dir
 
 
-detectDuplicates : FilePath -> TList SrcDir -> IO b c d e f g h (Maybe (String, (FilePath, FilePath)))
+detectDuplicates : FilePath -> TList SrcDir -> IO c d e f g h (Maybe (String, (FilePath, FilePath)))
 detectDuplicates root srcDirs =
   IO.bind (MList.traverse IO.pure IO.liftA2 (toPair root) srcDirs) <| \pairs ->
   IO.return <| Map.lookupMin <| Map.mapMaybe isDup <|
     Map.fromListWith OneOrMore.more pairs
 
 
-toPair : FilePath -> SrcDir -> IO b c d e f g h (String, OneOrMore.OneOrMore FilePath)
+toPair : FilePath -> SrcDir -> IO c d e f g h (String, OneOrMore.OneOrMore FilePath)
 toPair root srcDir =
-  IO.return ( SysFile.toString (toAbsolute root srcDir), OneOrMore.one (toGiven srcDir) )
+  IO.return ( Dir.toString (toAbsolute root srcDir), OneOrMore.one (toGiven srcDir) )
 
 
 isDup : OneOrMore.OneOrMore FilePath -> Maybe (FilePath, FilePath)
@@ -338,12 +338,12 @@ depsDecoder valueDecoder =
 
 dirsDecoder : Decoder (NE.TList SrcDir)
 dirsDecoder =
-  D.fmap (NE.fmap (toSrcDir << SysFile.fromString << Json.toChars)) <| D.nonEmptyList D.string Exit.OP_NoSrcDirs
+  D.fmap (NE.fmap (toSrcDir << Dir.fromString << Json.toChars)) <| D.nonEmptyList D.string Exit.OP_NoSrcDirs
 
 
 toSrcDir : FilePath -> SrcDir
 toSrcDir path =
-  if SysFile.isRelative path
+  if Dir.isRelative path
   then RelativeSrcDir path
   else AbsoluteSrcDir path
 

@@ -127,12 +127,18 @@ eatSpaces src pos end row col =
         eatSpaces src (pos + 1) end (row + 1) 1
 
       0x7B {- { -} ->
-        eatMultiComment src pos end row col
+        let ((maybeStatus, newPos), (newRow, newCol)) = eatMultiComment src pos end row col in
+        case maybeStatus of
+          Nothing     -> eatSpaces src newPos end newRow newCol
+          Just status -> ((status, newPos), (newRow, newCol))
 
       0x2D {- - -} ->
         let pos1 = pos + 1 in
         if pos1 < end && P.unsafeIndex src pos1 == 0x2D {- - -} then
-          eatLineComment src (pos + 2) end row (col + 2)
+          let ((maybeStatus, newPos), (newRow, newCol)) = eatLineComment src (pos + 2) end row (col + 2) in
+          case maybeStatus of
+            Nothing     -> eatSpaces src newPos end newRow newCol
+            Just status -> ((status, newPos), (newRow, newCol))
         else
           ((Good, pos), (row, col))
 
@@ -150,15 +156,15 @@ eatSpaces src pos end row col =
 -- LINE COMMENTS
 
 
-eatLineComment : String -> Int -> Int -> P.Row -> P.Col -> ((Status, Int), (P.Row, P.Col))
+eatLineComment : String -> Int -> Int -> P.Row -> P.Col -> ((Maybe Status, Int), (P.Row, P.Col))
 eatLineComment src pos end row col =
   if pos >= end then
-    ((Good, pos), (row, col))
+    ((Just Good, pos), (row, col))
 
   else
     let word = P.unsafeIndex src pos in
     if word == 0x0A {- \n -} then
-      eatSpaces src (pos + 1) end (row + 1) 1
+      ((Nothing, pos + 1), (row + 1, 1))
     else
       let newPos = pos + (P.getCharWidth word) in
       eatLineComment src newPos end row (col + 1)
@@ -168,31 +174,31 @@ eatLineComment src pos end row col =
 -- MULTI COMMENTS
 
 
-eatMultiComment : String -> Int -> Int -> P.Row -> P.Col -> ((Status, Int), (P.Row, P.Col))
+eatMultiComment : String -> Int -> Int -> P.Row -> P.Col -> ((Maybe Status, Int), (P.Row, P.Col))
 eatMultiComment src pos end row col =
   let
     pos1 = pos + 1
     pos2 = pos + 2
   in
   if pos2 >= end then
-    ((Good, pos), (row, col))
+    ((Just Good, pos), (row, col))
 
   else if P.unsafeIndex src pos1 == 0x2D {- - -} then
 
     if P.unsafeIndex src pos2 == 0x7C {- | -} then
-      ((Good, pos), (row, col))
+      ((Just Good, pos), (row, col))
     else
       let
         ((status, newPos), (newRow, newCol)) =
           eatMultiCommentHelp src pos2 end row (col + 2) 1
       in
       case status of
-        MultiGood    -> eatSpaces src newPos end newRow newCol
-        MultiTab     -> ((HasTab, newPos), (newRow, newCol))
-        MultiEndless -> ((EndlessMultiComment, pos), (row, col))
+        MultiGood    -> ((Nothing, newPos), (newRow, newCol))
+        MultiTab     -> ((Just HasTab, newPos), (newRow, newCol))
+        MultiEndless -> ((Just EndlessMultiComment, pos), (row, col))
 
   else
-    ((Good, pos), (row, col))
+    ((Just Good, pos), (row, col))
 
 
 type MultiStatus
@@ -247,7 +253,7 @@ docComment toExpectation toSpaceError =
         col3 = col + 3
 
         ((status, newPos), (newRow, newCol)) =
-           eatMultiCommentHelp src pos3 end row col3 1
+          eatMultiCommentHelp src pos3 end row col3 1
       in
       case status of
         MultiGood ->

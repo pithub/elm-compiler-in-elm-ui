@@ -1,9 +1,9 @@
 {- MANUALLY FORMATTED -}
 module Terminal.Make exposing
-  ( {-Flags(..)
+  ( Flags(..)
   , Output(..)
-  , ReportType(..)
-  ,-} run, IO
+  --, ReportType(..)
+  , run, IO
   --, reportType
   --, output
   --, docsFile
@@ -16,12 +16,14 @@ import Builder.File as File
 import Builder.Generate as Generate
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Task as Task
+import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
-import Extra.System.File as SysFile exposing (FilePath)
+import Compiler.Generate.Html as Html
+import Extra.System.Dir as Dir exposing (FilePath)
 import Extra.System.IO as IO
-import Extra.Type.Either exposing (Either)
+import Extra.Type.Either exposing (Either(..))
 import Extra.Type.List as MList exposing (TList)
 import Extra.Type.Maybe as MMaybe
 import Terminal.Command as Command
@@ -32,7 +34,25 @@ import Terminal.Command as Command
 
 
 type alias IO g h v =
-  IO.IO (Command.State g h) v
+  IO.IO (Command.GlobalState g h) v
+
+
+
+-- FLAGS
+
+
+{- NEW: async -}
+type Flags =
+  Flags
+    {- debug -} Bool
+    {- optimize -} Bool
+    {- async -} Bool
+    {- output -} (Maybe Output)
+
+
+type Output
+  = JS FilePath
+  | Html FilePath
 
 
 
@@ -40,12 +60,19 @@ type alias IO g h v =
 
 
 type alias Task z g h v =
-  Task.Task z (Command.State g h) Exit.Make v
+  Task.Task z (Command.GlobalState g h) Exit.Make v
 
 
-{- NEW: async -}
-run : FilePath -> TList FilePath -> Bool -> Bool -> Bool -> FilePath -> IO g h (Either Exit.Make ())
-run root paths debug optimize async target =
+run : TList FilePath -> Flags -> IO g h (Either Exit.Make ())
+run paths flags =
+  IO.bind Stuff.findRoot <| \maybeRoot ->
+  case maybeRoot of
+    Just root -> runHelp root paths flags
+    Nothing   -> IO.return <| Left <| Exit.MakeNoOutline
+
+
+runHelp : FilePath -> TList FilePath -> Flags -> IO g h (Either Exit.Make ())
+runHelp root paths (Flags debug optimize async maybeOutput) =
   Task.run <|
   Task.bind (getMode debug optimize async) <| \desiredMode ->
   Task.bind (Task.eio Exit.MakeBadDetails (Details.load root)) <| \details ->
@@ -56,13 +83,34 @@ run root paths debug optimize async target =
 
     p::ps ->
       Task.bind (buildPaths root details (NE.CList p ps)) <| \artifacts ->
-      case getNoMains artifacts of
-        [] ->
-          Task.bind (toBuilder root details desiredMode artifacts) <| \builder ->
-          generate target builder
+      case maybeOutput of
+        Nothing ->
+          case getMains artifacts of
+            [] ->
+              Task.return ()
 
-        name::names ->
-          Task.throw (Exit.MakeNonMainFilesIntoJavaScript name names)
+            [name] ->
+              Task.bind (toBuilder root details desiredMode artifacts) <| \builder ->
+              generate (Dir.fromString "index.html") (Html.sandwich name builder)
+
+            _::_ ->
+              Task.bind (toBuilder root details desiredMode artifacts) <| \builder ->
+              generate (Dir.fromString "elm.js") builder
+
+        Just (JS target) ->
+          case getNoMains artifacts of
+            [] ->
+              Task.bind (toBuilder root details desiredMode artifacts) <| \builder ->
+              generate target builder
+
+            name::names ->
+              Task.throw (Exit.MakeNonMainFilesIntoJavaScript name names)
+
+        Just (Html target) ->
+          Task.bind (hasOneMain artifacts) <| \name ->
+          Task.bind (toBuilder root details desiredMode artifacts) <| \builder ->
+          generate target (Html.sandwich name builder)
+
 
 
 
@@ -114,6 +162,23 @@ buildPaths root details paths =
 -- GET MAINS
 
 
+getMains : Build.Artifacts -> TList ModuleName.Raw
+getMains (Build.Artifacts _ _ roots modules) =
+  MMaybe.mapMaybe (getMain modules) (NE.toList roots)
+
+
+getMain : TList Build.Module -> Build.Root -> Maybe ModuleName.Raw
+getMain modules root =
+  case root of
+    Build.Inside name ->
+      if MList.any (isMain name) modules
+      then Just name
+      else Nothing
+
+    Build.Outside name (Opt.LocalGraph maybeMain _ _) ->
+      MMaybe.bind maybeMain <| \_ -> Just name
+
+
 isMain : ModuleName.Raw -> Build.Module -> Bool
 isMain targetName modul =
   case modul of
@@ -122,6 +187,17 @@ isMain targetName modul =
 
     Build.Cached name mainIsDefined _ ->
       mainIsDefined && name == targetName
+
+
+
+-- HAS ONE MAIN
+
+
+hasOneMain : Build.Artifacts -> Task z g h ModuleName.Raw
+hasOneMain (Build.Artifacts _ _ roots modules) =
+  case roots of
+    NE.CList root [] -> Task.mio Exit.MakeNoMain (IO.return <| getMain modules root)
+    NE.CList _ (_::_) -> Task.throw Exit.MakeMultipleFilesIntoHtml
 
 
 
@@ -154,7 +230,7 @@ getNoMain modules root =
 generate : FilePath -> String -> Task z g h ()
 generate target builder =
   Task.io <|
-    IO.bind (SysFile.createDirectoryIfMissing True (SysFile.dropLastName target)) <| \_ ->
+    IO.bind (Dir.createDirectoryIfMissing True (Dir.dropLastName target)) <| \_ ->
     File.writeUtf8 target builder
 
 

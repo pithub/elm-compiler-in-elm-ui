@@ -31,7 +31,7 @@ import Compiler.Json.Decode as D
 import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
 import Extra.Data.Binary as B
-import Extra.System.File exposing (FileName)
+import Extra.System.Dir exposing (FileName)
 import Extra.Type.List exposing (TList)
 
 
@@ -49,7 +49,7 @@ toChars =
 
 toFileNames : Raw -> TList FileName
 toFileNames name =
-    String.split "." name
+  String.split "." name
 
 
 toHyphenName : Raw -> FileName
@@ -130,27 +130,27 @@ getModule (Canonical _ name) = name
 
 
 type alias Comparable =
-    ( String, Pkg.Comparable )
+  ( String, Pkg.Comparable )
 
 
 toComparable : Canonical -> Comparable
 toComparable (Canonical pkg name) =
-    ( name, Pkg.toComparable pkg )
+  ( name, Pkg.toComparable pkg )
 
 
 fromComparable : Comparable -> Canonical
 fromComparable ( name, pkg ) =
-    Canonical (Pkg.fromComparable pkg) name
+  Canonical (Pkg.fromComparable pkg) name
 
 
 comparison : Canonical -> Canonical -> Order
 comparison can1 can2 =
-    compare (toComparable can1) (toComparable can2)
+  compare (toComparable can1) (toComparable can2)
 
 
 toString : Canonical -> String
 toString (Canonical pkg name) =
-    Pkg.toString pkg ++ "/" ++ name
+  Pkg.toString pkg ++ "/" ++ name
 
 
 

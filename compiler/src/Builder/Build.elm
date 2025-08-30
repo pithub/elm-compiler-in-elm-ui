@@ -10,7 +10,7 @@ module Builder.Build exposing
   , ReplArtifacts(..)
   , DocsGoal, DocsGoalKind(..), ignoreDocs
   --
-  , State
+  , GlobalState
   , LocalState
   , initialState
   , lensMVCachedInterface
@@ -41,7 +41,8 @@ import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Syntax as Syntax
 import Compiler.Reporting.Render.Type.Localizer as L
 import Extra.Data.Graph as Graph
-import Extra.System.File as SysFile exposing (FileName, FilePath)
+import Extra.System.Config as Config
+import Extra.System.Dir as Dir exposing (FileName, FilePath)
 import Extra.System.IO as IO
 import Extra.Type.Either as Either exposing (Either(..))
 import Extra.Type.Lens exposing (Lens)
@@ -58,18 +59,18 @@ import Unicode as UChar
 -- PUBLIC STATE
 
 
-type alias State e f g h =
-  Details.State (LocalState e f g h) e f g h
+type alias GlobalState e f g h =
+  Details.GlobalState (LocalState e f g h) e f g h
 
 
 type LocalState e f g h = LocalState
-  {- mvStatus -} (MVar.State (State e f g h) Status)
-  {- mvStatusMap -} (MVar.State (State e f g h) (Map.Map ModuleName.Raw (MVar Status)))
-  {- mvRootStatus -} (MVar.State (State e f g h) RootStatus)
-  {- mvRootResult -} (MVar.State (State e f g h) RootResult)
-  {- mvResult -} (MVar.State (State e f g h) Result)
-  {- mvResultMap -} (MVar.State (State e f g h) ResultDict)
-  {- mvCachedInterface -} (MVar.State (State e f g h) CachedInterface)
+  {- mvStatus -} (MVar.State (GlobalState e f g h) Status)
+  {- mvStatusMap -} (MVar.State (GlobalState e f g h) (Map.Map ModuleName.Raw (MVar Status)))
+  {- mvRootStatus -} (MVar.State (GlobalState e f g h) RootStatus)
+  {- mvRootResult -} (MVar.State (GlobalState e f g h) RootResult)
+  {- mvResult -} (MVar.State (GlobalState e f g h) Result)
+  {- mvResultMap -} (MVar.State (GlobalState e f g h) ResultDict)
+  {- mvCachedInterface -} (MVar.State (GlobalState e f g h) CachedInterface)
 
 
 initialState : LocalState e f g h
@@ -83,43 +84,43 @@ initialState = LocalState
   {- mvCachedInterface -} (MVar.initialState "CachedInterface")
 
 
-lensMVStatus : Lens (State e f g h) (MVar.State (State e f g h) Status)
+lensMVStatus : Lens (GlobalState e f g h) (MVar.State (GlobalState e f g h) Status)
 lensMVStatus =
   { getter = \(Global.State _ _ _ (LocalState x _ _ _ _ _ _) _ _ _ _) -> x
   , setter = \x (Global.State a b c (LocalState _ bi ci di ei fi gi) e f g h) -> Global.State a b c (LocalState x bi ci di ei fi gi) e f g h
   }
 
-lensMVStatusMap : Lens (State e f g h) (MVar.State (State e f g h) (Map.Map ModuleName.Raw (MVar Status)))
+lensMVStatusMap : Lens (GlobalState e f g h) (MVar.State (GlobalState e f g h) (Map.Map ModuleName.Raw (MVar Status)))
 lensMVStatusMap =
   { getter = \(Global.State _ _ _ (LocalState _ x _ _ _ _ _) _ _ _ _) -> x
   , setter = \x (Global.State a b c (LocalState bi _ ci di ei fi gi) e f g h) -> Global.State a b c (LocalState bi x ci di ei fi gi) e f g h
   }
 
-lensMVRootStatus : Lens (State e f g h) (MVar.State (State e f g h) RootStatus)
+lensMVRootStatus : Lens (GlobalState e f g h) (MVar.State (GlobalState e f g h) RootStatus)
 lensMVRootStatus =
   { getter = \(Global.State _ _ _ (LocalState _ _ x _ _ _ _) _ _ _ _) -> x
   , setter = \x (Global.State a b c (LocalState bi ci _ di ei fi gi) e f g h) -> Global.State a b c (LocalState bi ci x di ei fi gi) e f g h
   }
 
-lensMVRootResult : Lens (State e f g h) (MVar.State (State e f g h) RootResult)
+lensMVRootResult : Lens (GlobalState e f g h) (MVar.State (GlobalState e f g h) RootResult)
 lensMVRootResult =
   { getter = \(Global.State _ _ _ (LocalState _ _ _ x _ _ _) _ _ _ _) -> x
   , setter = \x (Global.State a b c (LocalState bi ci di _ ei fi gi) e f g h) -> Global.State a b c (LocalState bi ci di x ei fi gi) e f g h
   }
 
-lensMVResult : Lens (State e f g h) (MVar.State (State e f g h) Result)
+lensMVResult : Lens (GlobalState e f g h) (MVar.State (GlobalState e f g h) Result)
 lensMVResult =
   { getter = \(Global.State _ _ _ (LocalState _ _ _ _ x _ _) _ _ _ _) -> x
   , setter = \x (Global.State a b c (LocalState bi ci di ei _ fi gi) e f g h) -> Global.State a b c (LocalState bi ci di ei x fi gi) e f g h
   }
 
-lensMVResultMap : Lens (State e f g h) (MVar.State (State e f g h) ResultDict)
+lensMVResultMap : Lens (GlobalState e f g h) (MVar.State (GlobalState e f g h) ResultDict)
 lensMVResultMap =
   { getter = \(Global.State _ _ _ (LocalState _ _ _ _ _ x _) _ _ _ _) -> x
   , setter = \x (Global.State a b c (LocalState bi ci di ei fi _ gi) e f g h) -> Global.State a b c (LocalState bi ci di ei fi x gi) e f g h
   }
 
-lensMVCachedInterface : Lens (State e f g h) (MVar.State (State e f g h) CachedInterface)
+lensMVCachedInterface : Lens (GlobalState e f g h) (MVar.State (GlobalState e f g h) CachedInterface)
 lensMVCachedInterface =
   { getter = \(Global.State _ _ _ (LocalState _ _ _ _ _ _ x) _ _ _ _) -> x
   , setter = \x (Global.State a b c (LocalState bi ci di ei fi gi _) e f g h) -> Global.State a b c (LocalState bi ci di ei fi gi x) e f g h
@@ -131,7 +132,7 @@ lensMVCachedInterface =
 
 
 type alias IO e f g h v =
-  IO.IO (State e f g h) v
+  IO.IO (GlobalState e f g h) v
 
 
 
@@ -153,10 +154,13 @@ makeEnv root (Details.Details _ validOutline buildID locals foreigns _) =
   case validOutline of
     Details.ValidApp givenSrcDirs ->
       IO.bind (MList.traverse IO.pure IO.liftA2 (toAbsoluteSrcDir root) (NE.toList givenSrcDirs)) <| \srcDirs ->
-      IO.return <| Env root Parse.Application srcDirs buildID locals foreigns
+      IO.bind Config.additionalSrcDirs <| \additionalSrcDirNames ->
+      let makeAbsolute name = IO.fmap AbsoluteSrcDir (Dir.makeAbsolute (Dir.fromString name)) in
+      IO.bind (MList.traverse IO.pure IO.liftA2 makeAbsolute additionalSrcDirNames) <| \additionalSrcDirs ->
+      IO.return <| Env root Parse.Application (srcDirs ++ additionalSrcDirs) buildID locals foreigns
 
     Details.ValidPkg pkg _ _ ->
-      IO.bind (toAbsoluteSrcDir root (Outline.RelativeSrcDir (SysFile.fromString "src"))) <| \srcDir ->
+      IO.bind (toAbsoluteSrcDir root (Outline.RelativeSrcDir (Dir.fromString "src"))) <| \srcDir ->
       IO.return <| Env root (Parse.Package pkg) [srcDir] buildID locals foreigns
 
 
@@ -174,13 +178,13 @@ toAbsoluteSrcDir root srcDir =
     (
       case srcDir of
         Outline.AbsoluteSrcDir dir -> dir
-        Outline.RelativeSrcDir dir -> SysFile.combine root dir
+        Outline.RelativeSrcDir dir -> Dir.combine root dir
     )
 
 
 addRelative : AbsoluteSrcDir -> TList FileName -> FilePath
 addRelative (AbsoluteSrcDir srcDir) segments =
-  SysFile.addExtension (SysFile.addNames srcDir segments) "elm"
+  Dir.addExtension (Dir.addNames srcDir segments) "elm"
 
 
 
@@ -191,11 +195,11 @@ addRelative (AbsoluteSrcDir srcDir) segments =
 -- described in Chapter 13 of Parallel and Concurrent Programming in Haskell by Simon Marlow
 -- https://www.oreilly.com/library/view/parallel-and-concurrent/9781449335939/ch13.html#sec_conc-par-overhead
 --
-fork : MVar.Lens (State e f g h) v -> (() -> IO e f g h v) -> IO e f g h (MVar v)
+fork : MVar.Lens (GlobalState e f g h) v -> (() -> IO e f g h v) -> IO e f g h (MVar v)
 fork = MVar.newWaiting
 
 
-forkWithKey : MVar.Lens (State e f g h) w -> (comparable -> v -> () -> IO e f g h w) -> Map.Map comparable v -> IO e f g h (Map.Map comparable (MVar w))
+forkWithKey : MVar.Lens (GlobalState e f g h) w -> (comparable -> v -> () -> IO e f g h w) -> Map.Map comparable v -> IO e f g h (Map.Map comparable (MVar w))
 forkWithKey lens func dict =
   Map.traverseWithKey IO.pure IO.liftA2 (\k v -> fork lens (func k v)) dict
 
@@ -341,7 +345,7 @@ crawlModule ((Env root projectType srcDirs buildID locals foreigns) as env) mvar
               else crawlDeps env mvar deps (SCached local)
 
     p1::p2::ps ->
-      IO.return <| SBadImport <| Import.AmbiguousLocal (SysFile.makeRelative root p1) (SysFile.makeRelative root p2) (MList.map (SysFile.makeRelative root) ps)
+      IO.return <| SBadImport <| Import.AmbiguousLocal (Dir.makeRelative root p1) (Dir.makeRelative root p2) (MList.map (Dir.makeRelative root) ps)
 
     [] ->
       case Map.lookup name foreigns of
@@ -355,7 +359,7 @@ crawlModule ((Env root projectType srcDirs buildID locals foreigns) as env) mvar
 
         Nothing ->
           if Name.isKernel name && Parse.isKernel projectType then
-            IO.bind (File.exists (SysFile.addExtension (SysFile.addNames (SysFile.fromString "src") (ModuleName.toFileNames name)) "js")) <| \exists ->
+            IO.bind (File.exists (Dir.addExtension (Dir.addNames (Dir.fromString "src") (ModuleName.toFileNames name)) "js")) <| \exists ->
             IO.return <| if exists then SKernel else
               SBadImport Import.NotFound
           else
@@ -372,12 +376,12 @@ isEquivalent root path oldPath =
         ( _, [] ) -> False
         ( prefixHead :: prefixTail, testHead :: testTail ) -> prefixHead == testHead && startsWith prefixTail testTail
   in
-  startsWith (SysFile.getNames (SysFile.makeRelative root path)) (SysFile.getNames oldPath)
+  startsWith (Dir.getNames (Dir.makeRelative root path)) (Dir.getNames oldPath)
 
 
 crawlFile : Env -> MVar StatusDict -> ModuleName.Raw -> FilePath -> File.Time -> Details.BuildID -> IO e f g h Status
 crawlFile ((Env root projectType _ buildID _ _) as env) mvar expectedName path time lastChange =
-  IO.bind (File.readUtf8 (SysFile.combine root path)) <| \source ->
+  IO.bind (File.readUtf8 (Dir.combine root path)) <| \source ->
 
   case Parse.fromByteString projectType source of
     Left err ->
@@ -943,7 +947,7 @@ checkRoots : NE.TList RootInfo -> Either Exit.BuildProjectProblem (NE.TList Root
 checkRoots infos =
   let
     toOneOrMore ((RootInfo absolute _ _) as loc) =
-      (SysFile.toString absolute, OneOrMore.one loc)
+      (Dir.toString absolute, OneOrMore.one loc)
 
     fromOneOrMore loc locs =
       case locs of
@@ -973,22 +977,22 @@ getRootInfo : Env -> FilePath -> IO e f g h (Either Exit.BuildProjectProblem Roo
 getRootInfo env path =
   IO.bind (File.exists path) <| \exists ->
   if exists
-    then IO.andThen (getRootInfoHelp env path) <| SysFile.makeAbsolute path
+    then IO.andThen (getRootInfoHelp env path) <| Dir.makeAbsolute path
     else IO.return (Left (Exit.BP_PathUnknown path))
 
 
 getRootInfoHelp : Env -> FilePath -> FilePath -> IO e f g h (Either Exit.BuildProjectProblem RootInfo)
 getRootInfoHelp (Env _ _ srcDirs _ _ _) path absolutePath =
   let
-    (dirs, file) = SysFile.splitLastName absolutePath
-    (final, ext) = SysFile.splitExtension file
+    (dirs, file) = Dir.splitLastName absolutePath
+    (final, ext) = Dir.splitExtension file
   in
   if ext /= "elm"
   then
     IO.return <| Left <| Exit.BP_WithBadExtension path
   else
     let
-      absoluteSegments = MList.reverse (final :: SysFile.getNames dirs)
+      absoluteSegments = MList.reverse (final :: Dir.getNames dirs)
     in
     case MMaybe.mapMaybe (isInsideSrcDirByPath absoluteSegments) srcDirs of
       [] ->
@@ -1021,7 +1025,7 @@ isInsideSrcDirByName names srcDir =
 
 isInsideSrcDirByPath : TList FileName -> AbsoluteSrcDir -> Maybe (FilePath, Either (TList FileName) (TList FileName))
 isInsideSrcDirByPath segments (AbsoluteSrcDir srcDir) =
-  MMaybe.bind (dropPrefix (MList.reverse (SysFile.getNames srcDir)) segments) <| \names ->
+  MMaybe.bind (dropPrefix (MList.reverse (Dir.getNames srcDir)) segments) <| \names ->
     if MList.all isGoodName names
     then Just (srcDir, Right names)
     else Just (srcDir, Left names)

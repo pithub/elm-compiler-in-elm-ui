@@ -17,7 +17,7 @@ import Terminal.Terminal as Terminal
 
 
 type alias IO g h v =
-  IO.IO (Command.State g h) v
+  IO.IO (Command.GlobalState g h) v
 
 
 
